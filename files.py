@@ -29,6 +29,9 @@ def convertToInputs(mra, labels):
     Xs, Ys = [], []
     for row in range(rows):
         x, y, z, label = labels[row]
+        x -= 1
+        y -= 1
+        z -= 1
         Xs.append(mra[x-PAD:x+PAD+1, y-PAD:y+PAD+1, z-PAD:z+PAD+1])
         Ys.append(label)
     return np.array(Xs), np.array(Ys)
