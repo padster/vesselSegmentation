@@ -22,9 +22,12 @@ def loadLabels(path='data/Normal001-Labels.mat'):
     return loadMat(path, 'coordTable')
 
 # Given [X Y Z 0/1-label], and intensity, pick out cubes (of size CUBE_SZ) around the centres.
-def convertToInputs(mra, labels):
+def convertToInputs(mra, labels, pad=None):
     rows, cols = labels.shape
     assert cols == 4
+
+    if pad is None:
+        pad = PAD
 
     Xs, Ys = [], []
     for row in range(rows):
@@ -32,25 +35,32 @@ def convertToInputs(mra, labels):
         x -= 1
         y -= 1
         z -= 1
-        Xs.append(mra[x-PAD:x+PAD+1, y-PAD:y+PAD+1, z-PAD:z+PAD+1])
+        Xs.append(mra[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1])
         Ys.append(label)
     return np.array(Xs), np.array(Ys)
 
 # Given full volume, split up into cubes the same size as the inputs
-def convertEntireVolume(mra):
+def convertEntireVolume(mra, pad=None):
     nX, nY, nZ = mra.shape
 
+    if pad is None:
+        pad = PAD
+
     Xs = []
-    for x in range(PAD, nX - PAD):
-        for y in range(PAD, nY - PAD):
-            for z in range(PAD, nZ - PAD):
-                Xs.append(mra[x-PAD:x+PAD+1, y-PAD:y+PAD+1, z-PAD:z+PAD+1])
+    for x in range(pad, nX - pad):
+        for y in range(pad, nY - pad):
+            for z in range(pad, nZ - pad):
+                Xs.append(mra[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1])
     return np.array(Xs)
 
 def fillPredictions(result, predictions):
     nX, nY, nZ = result.shape
-    predictions = predictions.reshape( (nX - 2*PAD, nY - 2*PAD, nZ - 2*PAD) )
-    result[PAD:nX-PAD, PAD:nY-PAD, PAD:nZ-PAD] = predictions
+
+    if pad is None:
+        pad = PAD
+        
+    predictions = predictions.reshape( (nX - 2*pad, nY - 2*pad, nZ - 2*pad) )
+    result[pad:nX-pad, pad:nY-pad, pad:nZ-pad] = predictions
     return result
 
 # Write out 3d matrix of [0 - 1] predictions for each cell.

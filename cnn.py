@@ -2,8 +2,9 @@ import numpy as np
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.metrics import roc_auc_score
 from tqdm import tqdm
-import xgboost as xgb
 import matplotlib.pyplot as plt
+import tensorflow as tf
+import datetime
 
 import files
 
@@ -11,7 +12,55 @@ N_FOLDS = 2 # Train on 3/4, Test on 1/4
 N_REPEATS = 5 # K-fold this many times
 RANDOM_SEED = 194981
 
+SIZE = 7
+
 HACK_GUESSES = []
+
+def buildNetwork(dropoutRate=0.7, learningRate=0.15, seed=RANDOM_SEED):
+    xInput = tf.placeholder(tf.float32, shape=[None, SIZE, SIZE, SIZE])
+    xInputAsOneChannel = tf.expand_dims(xInput, -1)
+    yInput = tf.placeholder(tf.float32, shape=[None, 2])
+    
+    with tf.name_scope("layer_a"):
+        # conv => 7*7*7
+        conv1 = tf.layers.conv3d(inputs=xInputAsOneChannel, filters=32, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        # conv => 7*7*7
+        conv2 = tf.layers.conv3d(inputs=conv1, filters=64, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        # pool => 3*3*3
+        pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[2,2,2], strides=2)
+        
+    """
+    with tf.name_scope("layer_c"):
+        # conv => 3*3*3
+        conv4 = tf.layers.conv3d(inputs=pool3, filters=64, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        # conv => 3*3*3
+        conv5 = tf.layers.conv3d(inputs=conv4, filters=128, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        # pool => 1*1*1
+        pool6 = tf.layers.max_pooling3d(inputs=conv5, pool_size=[2,2,2], strides=2)
+    """
+        
+    with tf.name_scope("batch_norm"):
+        cnn3d_bn = tf.layers.batch_normalization(inputs=pool3, training=True)
+        
+    with tf.name_scope("fully_con"):
+        flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*64])
+        dense = tf.layers.dense(inputs=flattening, units=512, activation=tf.nn.relu)
+        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=True)
+        
+    with tf.name_scope("y_conv"):
+        prediction = tf.layers.dense(inputs=dropout, units=2)
+        predictedProbs = tf.nn.softmax(prediction)
+    
+    with tf.name_scope("cross_entropy"):
+        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=yInput))
+                              
+    with tf.name_scope("training"):
+        optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
+
+    correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
+    accuracy = tf.reduce_mean(tf.cast(correct, 'float'))
+
+    return xInput, yInput, optimizer, cost, accuracy, predictedProbs
 
 # Convert 4d: (R x X x Y x Z) into 2d: (R x XYZ)
 def flatCube(data):
@@ -20,8 +69,58 @@ def flatCube(data):
 
 # As an example, run CNN on these given labels and test data, return the score.
 def runOne(trainX, trainY, testX, testY):
-    pass
-    # return roc_auc_score(testY, preds)
+    epochs = 10
+    batchSize = 64
+
+    xInput, yInput, optimizer, cost, accuracy, scores = buildNetwork()
+
+    lastAcc = 0.0
+    with tf.Session() as sess:
+        optimizer, cost, 
+        sess.run(tf.global_variables_initializer())
+        start_time = datetime.datetime.now()
+
+        iterations = int(len(trainY)/batchSize) + 1
+        # run epochs
+        for epoch in range(epochs):
+            start_time_epoch = datetime.datetime.now()
+            print('Epoch', epoch, 'started', end='')
+            epoch_loss = 0
+            # mini batch
+            for itr in range(iterations):
+                mini_batch_x = trainX[itr*batchSize: (itr+1)*batchSize]
+                mini_batch_y = trainY[itr*batchSize: (itr+1)*batchSize]
+
+                batchYOneshot = (np.column_stack((mini_batch_y, mini_batch_y)) == [0, 1]) * 1
+
+                _optimizer, _cost = sess.run([optimizer, cost], feed_dict={xInput: mini_batch_x, yInput: batchYOneshot})
+                epoch_loss += _cost
+
+            #  using mini batch in case not enough memory
+            acc = 0.0
+            itrs = int(len(testY)/batchSize) + 1
+            for itr in range(itrs):
+                mini_batch_x_test = trainX[itr*batchSize: (itr+1)*batchSize]
+                mini_batch_y_test = trainY[itr*batchSize: (itr+1)*batchSize]
+
+                batchYOneshotTest = (np.column_stack((mini_batch_y_test, mini_batch_y_test)) == [0, 1]) * 1
+
+                acc += sess.run(accuracy, feed_dict={xInput: mini_batch_x_test, yInput: batchYOneshotTest})
+
+            end_time_epoch = datetime.datetime.now()
+            print(' Testing Set Accuracy:',acc/itrs, ' Time elapse: ', str(end_time_epoch - start_time_epoch))
+            lastAcc = acc/itrs
+
+        end_time = datetime.datetime.now()
+        print('Time elapse: ', str(end_time - start_time))
+
+        # Run against test:
+        testYOneshot = (np.column_stack((testY, testY)) == [0, 1]) * 1
+        testProbs = sess.run(scores, feed_dict={xInput: testX, yInput: testYOneshot})
+        testProbs = np.array(testProbs)[:, 1].tolist()
+        
+    HACK_GUESSES.extend(testProbs)
+    return roc_auc_score(testY, testProbs)
 
 def runKFold(Xs, Ys):
     """
@@ -33,13 +132,14 @@ def runKFold(Xs, Ys):
     print ("Input: %d, %d T, %d F" % (len(Ys), sum(Ys == 1), sum(Ys == 0)))
     rskf = RepeatedStratifiedKFold(n_splits=N_FOLDS, n_repeats=N_REPEATS, random_state=RANDOM_SEED)
     scores = []
-    for trainIdx, testIdx in rskf.split(Xs, Ys):
-        pass # HACK - REMOVE
-        # trainX, trainY = Xs[trainIdx], Ys[trainIdx]
-        # testX, testY = Xs[testIdx], Ys[testIdx]
-        # scores.append(runOne(trainX, trainY, testX, testY))
+    splits = [(a, b) for a, b in rskf.split(Xs, Ys)]
+    for i, (trainIdx, testIdx) in enumerate(splits):
+        print ("Split %d / %d" % (i + 1, len(splits)))
+        trainX, trainY = Xs[trainIdx], Ys[trainIdx]
+        testX, testY = Xs[testIdx], Ys[testIdx]
+        scores.append(runOne(trainX, trainY, testX, testY))
+        print ("Score = %f" % (scores[-1]))
 
-    """
     HG = np.array(HACK_GUESSES)
     for i in range(10):
         lBound = i / 10.0
@@ -47,7 +147,6 @@ def runKFold(Xs, Ys):
         print ("%0.1f - %0.1f = %d" % (lBound, uBound, ((lBound <= HG) & (HG < uBound)).sum()))
     plt.hist(HACK_GUESSES)
     plt.show()
-    """
     print ("Average score: %.3f " % (np.mean(np.array(scores))))
 
 def generatePrediction(Xs, Ys, mraAll):
@@ -92,7 +191,7 @@ def generatePrediction(Xs, Ys, mraAll):
 def generateAndWriteResults():
     mra = files.loadMRA()
     labels = files.loadLabels()
-    Xs, Ys = files.convertToInputs(mra, labels)
+    Xs, Ys = files.convertToInputs(mra, labels, pad=(SIZE-1)//2)
     print ("%d samples" % len(Xs))
     runKFold(Xs, Ys)
     # prediction = generatePrediction(Xs, Ys, mra)
