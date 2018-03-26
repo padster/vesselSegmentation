@@ -18,16 +18,14 @@ def loadRF(path='data/Normal001-MRA-RF.mat'):
     return loadMat(path, 'forest')
 
 # Loads the 2d [X Y Z 0/1-label] matrix for vessel annotations
-def loadLabels(path='data/Normal001-Labels.mat'):
+def loadLabels(path='data/Normal001-MRA-labels.mat'):
     return loadMat(path, 'coordTable')
 
 # Given [X Y Z 0/1-label], and intensity, pick out cubes (of size CUBE_SZ) around the centres.
-def convertToInputs(mra, labels, pad=None):
+def convertToInputs(mra, labels, pad=PAD):
     rows, cols = labels.shape
     assert cols == 4
-
-    if pad is None:
-        pad = PAD
+    sz = 2 * pad + 1
 
     Xs, Ys = [], []
     for row in range(rows):
@@ -35,8 +33,12 @@ def convertToInputs(mra, labels, pad=None):
         x -= 1
         y -= 1
         z -= 1
-        Xs.append(mra[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1])
-        Ys.append(label)
+        xCells = mra[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1]
+        if xCells.shape == (sz, sz, sz):
+            Xs.append(xCells)
+            Ys.append(label)
+        else:
+            print("Skipping boundary point %s" % str(labels[row]))
     return np.array(Xs), np.array(Ys)
 
 # Given full volume, split up into cubes the same size as the inputs

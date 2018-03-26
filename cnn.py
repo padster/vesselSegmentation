@@ -14,9 +14,16 @@ RANDOM_SEED = 194981
 
 SIZE = 7
 
-HACK_GUESSES = []
+N_EPOCHS = 20
+BATCH_SIZE = 8 # 64
 
-def buildNetwork(dropoutRate=0.7, learningRate=0.15, seed=RANDOM_SEED):
+LEARNING_RATE = 0.01
+DROPOUT_RATE = 0.5
+
+HACK_GUESSES = []
+HACK_COSTS = []
+
+def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     xInput = tf.placeholder(tf.float32, shape=[None, SIZE, SIZE, SIZE])
     xInputAsOneChannel = tf.expand_dims(xInput, -1)
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
@@ -44,7 +51,7 @@ def buildNetwork(dropoutRate=0.7, learningRate=0.15, seed=RANDOM_SEED):
         
     with tf.name_scope("fully_con"):
         flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*64])
-        dense = tf.layers.dense(inputs=flattening, units=512, activation=tf.nn.relu)
+        dense = tf.layers.dense(inputs=flattening, units=64, activation=tf.nn.relu)
         dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=True)
         
     with tf.name_scope("y_conv"):
@@ -69,12 +76,13 @@ def flatCube(data):
 
 # As an example, run CNN on these given labels and test data, return the score.
 def runOne(trainX, trainY, testX, testY):
-    epochs = 10
-    batchSize = 64
+    epochs = N_EPOCHS
+    batchSize = BATCH_SIZE
 
     xInput, yInput, optimizer, cost, accuracy, scores = buildNetwork()
 
     lastAcc = 0.0
+    costs = []
     with tf.Session() as sess:
         optimizer, cost, 
         sess.run(tf.global_variables_initializer())
@@ -95,9 +103,11 @@ def runOne(trainX, trainY, testX, testY):
 
                 _optimizer, _cost = sess.run([optimizer, cost], feed_dict={xInput: mini_batch_x, yInput: batchYOneshot})
                 epoch_loss += _cost
+            print ("Epoch %d had train loss %f" % (epoch, epoch_loss))
 
             #  using mini batch in case not enough memory
-            acc = 0.0
+            # acc = 0.0
+            totalCost = 0.0
             itrs = int(len(testY)/batchSize) + 1
             for itr in range(itrs):
                 mini_batch_x_test = trainX[itr*batchSize: (itr+1)*batchSize]
@@ -105,11 +115,14 @@ def runOne(trainX, trainY, testX, testY):
 
                 batchYOneshotTest = (np.column_stack((mini_batch_y_test, mini_batch_y_test)) == [0, 1]) * 1
 
-                acc += sess.run(accuracy, feed_dict={xInput: mini_batch_x_test, yInput: batchYOneshotTest})
+                # acc += sess.run(accuracy, feed_dict={xInput: mini_batch_x_test, yInput: batchYOneshotTest})
+                totalCost += sess.run(cost, feed_dict={xInput: mini_batch_x_test, yInput: batchYOneshotTest})
 
             end_time_epoch = datetime.datetime.now()
-            print(' Testing Set Accuracy:',acc/itrs, ' Time elapse: ', str(end_time_epoch - start_time_epoch))
-            lastAcc = acc/itrs
+            # print(' Testing Set Accuracy:', acc/itrs, '\tCost: ', totalCost, '\tTime elapse: ', str(end_time_epoch - start_time_epoch))
+            print(' Testing test loss: ', totalCost, '\tTime elapsed: ', str(end_time_epoch - start_time_epoch))
+            # lastAcc = acc/itrs
+            costs.append(totalCost)
 
         end_time = datetime.datetime.now()
         print('Time elapse: ', str(end_time - start_time))
@@ -120,6 +133,7 @@ def runOne(trainX, trainY, testX, testY):
         testProbs = np.array(testProbs)[:, 1].tolist()
         
     HACK_GUESSES.extend(testProbs)
+    HACK_COSTS.append(costs)
     return roc_auc_score(testY, testProbs)
 
 def runKFold(Xs, Ys):
@@ -139,6 +153,9 @@ def runKFold(Xs, Ys):
         testX, testY = Xs[testIdx], Ys[testIdx]
         scores.append(runOne(trainX, trainY, testX, testY))
         print ("Score = %f" % (scores[-1]))
+
+    plt.plot(np.array(HACK_COSTS).T)
+    plt.show()
 
     HG = np.array(HACK_GUESSES)
     for i in range(10):
