@@ -17,7 +17,7 @@ SIZE = 7
 N_EPOCHS = 20
 BATCH_SIZE = 8 # 64
 
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.1
 DROPOUT_RATE = 0.5
 
 HACK_GUESSES = []
@@ -27,7 +27,7 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
     xInput = tf.placeholder(tf.float32, shape=[None, SIZE, SIZE, SIZE])
     xInputAsOneChannel = tf.expand_dims(xInput, -1)
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
-    
+
     with tf.name_scope("layer_a"):
         # conv => 7*7*7
         conv1 = tf.layers.conv3d(inputs=xInputAsOneChannel, filters=32, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
@@ -35,7 +35,7 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
         conv2 = tf.layers.conv3d(inputs=conv1, filters=64, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
         # pool => 3*3*3
         pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[2,2,2], strides=2)
-        
+
     """
     with tf.name_scope("layer_c"):
         # conv => 3*3*3
@@ -45,29 +45,31 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
         # pool => 1*1*1
         pool6 = tf.layers.max_pooling3d(inputs=conv5, pool_size=[2,2,2], strides=2)
     """
-        
+
     with tf.name_scope("batch_norm"):
         cnn3d_bn = tf.layers.batch_normalization(inputs=pool3, training=True)
-        
+
     with tf.name_scope("fully_con"):
         flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*64])
         dense = tf.layers.dense(inputs=flattening, units=64, activation=tf.nn.relu)
         dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=True)
-        
+
     with tf.name_scope("y_conv"):
         prediction = tf.layers.dense(inputs=dropout, units=2)
         predictedProbs = tf.nn.softmax(prediction)
-    
+
     with tf.name_scope("cross_entropy"):
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=yInput))
-                              
+
     with tf.name_scope("training"):
-        optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
+        # optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
+        optimizer = tf.train.AdagradOptimizer(learningRate).minimize(cost)
 
     correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
-    accuracy = tf.reduce_mean(tf.cast(correct, 'float'))
+    # accuracy = tf.reduce_mean(tf.cast(correct, 'float'))
+    numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
 
-    return xInput, yInput, optimizer, cost, accuracy, predictedProbs
+    return xInput, yInput, optimizer, cost, numCorrect, predictedProbs
 
 # Convert 4d: (R x X x Y x Z) into 2d: (R x XYZ)
 def flatCube(data):
@@ -79,12 +81,12 @@ def runOne(trainX, trainY, testX, testY):
     epochs = N_EPOCHS
     batchSize = BATCH_SIZE
 
-    xInput, yInput, optimizer, cost, accuracy, scores = buildNetwork()
+    xInput, yInput, optimizer, cost, numCorrect, scores = buildNetwork()
 
-    lastAcc = 0.0
+    # lastAcc = 0.0
     costs = []
     with tf.Session() as sess:
-        optimizer, cost, 
+        optimizer, cost,
         sess.run(tf.global_variables_initializer())
         start_time = datetime.datetime.now()
 
@@ -92,22 +94,27 @@ def runOne(trainX, trainY, testX, testY):
         # run epochs
         for epoch in range(epochs):
             start_time_epoch = datetime.datetime.now()
-            print('Epoch', epoch, 'started', end='')
-            epoch_loss = 0
+            print('Epoch %d started' % (epoch))
+
             # mini batch
+            totalCost, totalCorr = 0.0, 0
             for itr in range(iterations):
                 mini_batch_x = trainX[itr*batchSize: (itr+1)*batchSize]
                 mini_batch_y = trainY[itr*batchSize: (itr+1)*batchSize]
 
                 batchYOneshot = (np.column_stack((mini_batch_y, mini_batch_y)) == [0, 1]) * 1
 
-                _optimizer, _cost = sess.run([optimizer, cost], feed_dict={xInput: mini_batch_x, yInput: batchYOneshot})
-                epoch_loss += _cost
-            print ("Epoch %d had train loss %f" % (epoch, epoch_loss))
+                _optimizer, _cost, _corr = sess.run([optimizer, cost, numCorrect], feed_dict={xInput: mini_batch_x, yInput: batchYOneshot})
+                totalCost += _cost
+                totalCorr += _corr
+
+            print (">> Epoch %d had train loss %f, #Correct = %d / %d = %f" % (
+                epoch, totalCost, totalCorr, len(trainY), totalCorr / len(trainY)
+            ))
 
             #  using mini batch in case not enough memory
             # acc = 0.0
-            totalCost = 0.0
+            totalCost, totalCorr = 0.0, 0
             itrs = int(len(testY)/batchSize) + 1
             for itr in range(itrs):
                 mini_batch_x_test = trainX[itr*batchSize: (itr+1)*batchSize]
@@ -116,11 +123,15 @@ def runOne(trainX, trainY, testX, testY):
                 batchYOneshotTest = (np.column_stack((mini_batch_y_test, mini_batch_y_test)) == [0, 1]) * 1
 
                 # acc += sess.run(accuracy, feed_dict={xInput: mini_batch_x_test, yInput: batchYOneshotTest})
-                totalCost += sess.run(cost, feed_dict={xInput: mini_batch_x_test, yInput: batchYOneshotTest})
+                _cost, _corr = sess.run([cost, numCorrect], feed_dict={xInput: mini_batch_x_test, yInput: batchYOneshotTest})
+                totalCost += _cost
+                totalCorr += _corr
 
             end_time_epoch = datetime.datetime.now()
             # print(' Testing Set Accuracy:', acc/itrs, '\tCost: ', totalCost, '\tTime elapse: ', str(end_time_epoch - start_time_epoch))
-            print(' Testing test loss: ', totalCost, '\tTime elapsed: ', str(end_time_epoch - start_time_epoch))
+            print('>> Testing loss: %f\t#Correct = %d/%d = %f\tTime elapsed: %s' % (
+                totalCost, totalCorr, len(testY), totalCorr / len(testY), str(end_time_epoch - start_time_epoch)
+            ))
             # lastAcc = acc/itrs
             costs.append(totalCost)
 
@@ -131,7 +142,7 @@ def runOne(trainX, trainY, testX, testY):
         testYOneshot = (np.column_stack((testY, testY)) == [0, 1]) * 1
         testProbs = sess.run(scores, feed_dict={xInput: testX, yInput: testYOneshot})
         testProbs = np.array(testProbs)[:, 1].tolist()
-        
+
     HACK_GUESSES.extend(testProbs)
     HACK_COSTS.append(costs)
     return roc_auc_score(testY, testProbs)

@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import roc_auc_score
+from sklearn.manifold import TSNE
 
 import files
 
@@ -84,9 +85,70 @@ def rfAnalysis():
 
 
 
+def clean_subplots(r, c, pad=0.05):
+    f = plt.figure()
+    ax = []
+    at = 1
+    for i in range(r):
+        row = []
+        for j in range(c):
+            axHere = f.add_subplot(r, c, at)
+            axHere.get_xaxis().set_visible(False)
+            axHere.get_yaxis().set_visible(False)
+            row.append(axHere)
+            at = at + 1
+        ax.append(row)
+    f.subplots_adjust(left=pad, right=1.0-pad, top=1.0-pad, bottom=pad, hspace=pad)
+    try:
+        plt.get_current_fig_manager().window.showMaximized()
+    except AttributeError:
+        pass # Can't maximize, sorry :(
+    return ax
+
+def show_tsne(ax, Xs, perplexity, learnRate, colors):
+    fitted = TSNE(
+        n_components=2, perplexity=perplexity, learning_rate=learnRate
+    ).fit_transform(Xs)
+    ax.scatter(fitted[:, 0], fitted[:, 1], color=colors)
+
+
+# Options for TSNE parameters to explore.
+PERPLEXITY_OPTIONS = [10, 22, 33, 50, 80]
+LEARN_RATE_OPTIONS = [10, 30, 100, 300, 1000]
+
+def simpleTSNE():
+    SZ = 7
+    PAD = SZ // 2
+    mra = files.loadMRA()
+    labels = files.loadLabels()
+    Xs, Ys = files.convertToInputs(mra, labels, pad=PAD)
+    print ("%d samples" % len(Xs))
+    xPoints = Xs.reshape(Xs.shape[0], SZ * SZ * SZ)
+
+    colours = []
+    for y in Ys:
+        if y < 0.5:
+            colours.append('#ff0000')
+        else:
+            colours.append('#00ff00')
+
+    print (Xs.shape)
+
+    ax = clean_subplots(5, 5)
+    for i, perplexity in enumerate(PERPLEXITY_OPTIONS):
+        ax[i][0].get_yaxis().set_visible(True)
+        ax[i][0].set_ylabel("Perplexity = %d" % perplexity)
+        for j, learnRate in enumerate(LEARN_RATE_OPTIONS):
+            if i == 0:
+                ax[0][j].set_title("Learn rate = %d" % learnRate)
+            show_tsne(ax[i][j], xPoints, perplexity, learnRate, colours)
+
+
+
 def main():
-    checkEMJVAgreement()
+    # checkEMJVAgreement()
     # rfAnalysis()
+    simpleTSNE()
 
 if __name__ == '__main__':
     main()
