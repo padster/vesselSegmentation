@@ -19,7 +19,7 @@ RANDOM_SEED = 194981
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.1
+LEARNING_RATE = 0.001 # 0.03
 DROPOUT_RATE = 0.5
 
 HACK_GUESSES = []
@@ -65,8 +65,8 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=yInput))
 
     with tf.name_scope("training"):
-        # optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
-        optimizer = tf.train.AdagradOptimizer(learningRate).minimize(cost)
+        optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
+        # optimizer = tf.train.AdagradOptimizer(learningRate).minimize(cost)
 
     correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
@@ -86,7 +86,7 @@ def runOne(trainX, trainY, testX, testY, firstRun):
     xInput, yInput, optimizer, cost, numCorrect, scores = buildNetwork()
 
     costs, corrs = [], []
-    with tf.Session(config=tf.ConfigProto(log_device_placement=firstRun)) as sess:
+    with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
         optimizer, cost,
         sess.run(tf.global_variables_initializer())
         start_time = datetime.datetime.now()
@@ -131,7 +131,7 @@ def runOne(trainX, trainY, testX, testY, firstRun):
                 totalCost, totalCorr, len(testY), totalCorr / len(testY), str(end_time_epoch - start_time_epoch)
             ))
             costs.append(totalCost)
-            corrs.append(totalCorr)
+            corrs.append(totalCorr/len(testY))
 
         end_time = datetime.datetime.now()
         print('Time elapse: ', str(end_time - start_time))
@@ -249,8 +249,8 @@ def generateAndWriteResults():
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
-    N_EPOCHS = 25
-    BATCH_SIZE = 16
+    N_EPOCHS = 30
+    BATCH_SIZE = 8
     RUN_LOCAL = False
 
     generateAndWriteResults()
