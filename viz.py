@@ -8,8 +8,8 @@ def clean_subplots(r, c, pad=0.05, show=True):
         row = []
         for j in range(c):
             axHere = f.add_subplot(r, c, at)
-            axHere.get_xaxis().set_visible(False)
-            axHere.get_yaxis().set_visible(False)
+            # axHere.get_xaxis().set_visible(False)
+            # axHere.get_yaxis().set_visible(False)
             row.append(axHere)
             at = at + 1
         ax.append(row)

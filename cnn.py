@@ -85,11 +85,6 @@ def runOne(trainX, trainY, testX, testY, firstRun):
 
     xInput, yInput, optimizer, cost, numCorrect, scores = buildNetwork()
 
-    xx = np.sum(trainX[len(trainX) // 2])
-    HACK_COSTS.append([xx, xx+0.1, xx + 0.2])
-    HACK_CORRS.append([xx, xx - 0.1, xx - 0.2])
-    return xx, xx + 1.0
-
     costs, corrs = [], []
     with tf.Session(config=tf.ConfigProto(log_device_placement=firstRun)) as sess:
         optimizer, cost,
@@ -150,7 +145,7 @@ def runOne(trainX, trainY, testX, testY, firstRun):
     HACK_GUESSES.extend(testProbs)
     HACK_COSTS.append(costs)
     HACK_CORRS.append(corrs)
-    return testCorr / len(testY), roc_auc_score(testY, testProbs)
+    return testCorr, roc_auc_score(testY, testProbs)
 
 def runKFold(Xs, Ys):
     """
@@ -181,7 +176,7 @@ def runKFold(Xs, Ys):
     ax[0][1].set_title("%Correct over epochs, per split ")
     ax[0][1].plot(np.array(HACK_CORRS).T)
 
-    image_path = "Loss and Correct"
+    image_path = "LossAndCorrect"
     plt.gcf().set_size_inches(18.5, 10.5)
     plt.savefig(image_path)
     print ("Image saved to %s" % str(image_path))
@@ -254,8 +249,8 @@ def generateAndWriteResults():
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
-    N_EPOCHS = 1 # 20
-    BATCH_SIZE = 8
+    N_EPOCHS = 25
+    BATCH_SIZE = 16
     RUN_LOCAL = False
 
     generateAndWriteResults()
