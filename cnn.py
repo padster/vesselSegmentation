@@ -7,21 +7,24 @@ import tensorflow as tf
 import datetime
 
 import files
+import viz
 
 N_FOLDS = 2 # Train on 3/4, Test on 1/4
 N_REPEATS = 5 # K-fold this many times
 RANDOM_SEED = 194981
 
-SIZE = 7
-
-N_EPOCHS = 20
-BATCH_SIZE = 8 # 64
+# SET IN MAIN:
+#SIZE = 0
+#N_EPOCHS = 0
+#BATCH_SIZE = 0
+#RUN_LOCAL = False
 
 LEARNING_RATE = 0.1
 DROPOUT_RATE = 0.5
 
 HACK_GUESSES = []
 HACK_COSTS = []
+HACK_CORRS = []
 
 def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     xInput = tf.placeholder(tf.float32, shape=[None, SIZE, SIZE, SIZE])
@@ -66,7 +69,6 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
         optimizer = tf.train.AdagradOptimizer(learningRate).minimize(cost)
 
     correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
-    # accuracy = tf.reduce_mean(tf.cast(correct, 'float'))
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
 
     return xInput, yInput, optimizer, cost, numCorrect, predictedProbs
@@ -77,15 +79,19 @@ def flatCube(data):
     return data.reshape((s[0], s[1] * s[2] * s[3]))
 
 # As an example, run CNN on these given labels and test data, return the score.
-def runOne(trainX, trainY, testX, testY):
+def runOne(trainX, trainY, testX, testY, firstRun):
     epochs = N_EPOCHS
     batchSize = BATCH_SIZE
 
     xInput, yInput, optimizer, cost, numCorrect, scores = buildNetwork()
 
-    # lastAcc = 0.0
-    costs = []
-    with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
+    xx = np.sum(trainX[len(trainX) // 2])
+    HACK_COSTS.append([xx, xx+0.1, xx + 0.2])
+    HACK_CORRS.append([xx, xx - 0.1, xx - 0.2])
+    return xx, xx + 1.0
+
+    costs, corrs = [], []
+    with tf.Session(config=tf.ConfigProto(log_device_placement=firstRun)) as sess:
         optimizer, cost,
         sess.run(tf.global_variables_initializer())
         start_time = datetime.datetime.now()
@@ -113,7 +119,6 @@ def runOne(trainX, trainY, testX, testY):
             ))
 
             #  using mini batch in case not enough memory
-            # acc = 0.0
             totalCost, totalCorr = 0.0, 0
             itrs = int(len(testY)/batchSize) + 1
             for itr in range(itrs):
@@ -122,30 +127,30 @@ def runOne(trainX, trainY, testX, testY):
 
                 batchYOneshotTest = (np.column_stack((mini_batch_y_test, mini_batch_y_test)) == [0, 1]) * 1
 
-                # acc += sess.run(accuracy, feed_dict={xInput: mini_batch_x_test, yInput: batchYOneshotTest})
                 _cost, _corr = sess.run([cost, numCorrect], feed_dict={xInput: mini_batch_x_test, yInput: batchYOneshotTest})
                 totalCost += _cost
                 totalCorr += _corr
 
             end_time_epoch = datetime.datetime.now()
-            # print(' Testing Set Accuracy:', acc/itrs, '\tCost: ', totalCost, '\tTime elapse: ', str(end_time_epoch - start_time_epoch))
             print('>> Testing loss: %f\t#Correct = %d/%d = %f\tTime elapsed: %s' % (
                 totalCost, totalCorr, len(testY), totalCorr / len(testY), str(end_time_epoch - start_time_epoch)
             ))
-            # lastAcc = acc/itrs
             costs.append(totalCost)
+            corrs.append(totalCorr)
 
         end_time = datetime.datetime.now()
         print('Time elapse: ', str(end_time - start_time))
 
         # Run against test:
         testYOneshot = (np.column_stack((testY, testY)) == [0, 1]) * 1
-        testProbs = sess.run(scores, feed_dict={xInput: testX, yInput: testYOneshot})
+        testProbs, testCorr = sess.run([scores, numCorrect], feed_dict={xInput: testX, yInput: testYOneshot})
         testProbs = np.array(testProbs)[:, 1].tolist()
+        testCorr = testCorr / len(testY)
 
     HACK_GUESSES.extend(testProbs)
     HACK_COSTS.append(costs)
-    return roc_auc_score(testY, testProbs)
+    HACK_CORRS.append(corrs)
+    return testCorr / len(testY), roc_auc_score(testY, testProbs)
 
 def runKFold(Xs, Ys):
     """
@@ -155,19 +160,36 @@ def runKFold(Xs, Ys):
       * run a bunch of times
     """
     print ("Input: %d, %d T, %d F" % (len(Ys), sum(Ys == 1), sum(Ys == 0)))
+
     rskf = RepeatedStratifiedKFold(n_splits=N_FOLDS, n_repeats=N_REPEATS, random_state=RANDOM_SEED)
-    scores = []
     splits = [(a, b) for a, b in rskf.split(Xs, Ys)]
+
+    allCorrect, allAUC = [], []
     for i, (trainIdx, testIdx) in enumerate(splits):
         print ("Split %d / %d" % (i + 1, len(splits)))
         trainX, trainY = Xs[trainIdx], Ys[trainIdx]
         testX, testY = Xs[testIdx], Ys[testIdx]
-        scores.append(runOne(trainX, trainY, testX, testY))
-        print ("Score = %f" % (scores[-1]))
+        correct, auc = runOne(trainX, trainY, testX, testY, firstRun=(i==0))
+        allCorrect.append(correct)
+        allAUC.append(auc)
+        print ("Correct / AUC = %.3f / %.3f" % (allCorrect[-1], allAUC[-1]))
 
-    plt.plot(np.array(HACK_COSTS).T)
-    plt.show()
 
+    ax = viz.clean_subplots(1, 2, show=RUN_LOCAL)
+    ax[0][0].set_title("Loss over epochs, per split")
+    ax[0][0].plot(np.array(HACK_COSTS).T)
+    ax[0][1].set_title("%Correct over epochs, per split ")
+    ax[0][1].plot(np.array(HACK_CORRS).T)
+
+    image_path = "Loss and Correct"
+    plt.gcf().set_size_inches(18.5, 10.5)
+    plt.savefig(image_path)
+    print ("Image saved to %s" % str(image_path))
+
+    if RUN_LOCAL:
+        plt.show()
+
+    """
     HG = np.array(HACK_GUESSES)
     for i in range(10):
         lBound = i / 10.0
@@ -175,7 +197,10 @@ def runKFold(Xs, Ys):
         print ("%0.1f - %0.1f = %d" % (lBound, uBound, ((lBound <= HG) & (HG < uBound)).sum()))
     plt.hist(HACK_GUESSES)
     plt.show()
-    print ("Average score: %.3f " % (np.mean(np.array(scores))))
+    """
+
+    print ("Average test correct: %.3f" % (np.mean(np.array(allCorrect))))
+    print ("Average AUC: %.3f " % (np.mean(np.array(allAUC))))
 
 def generatePrediction(Xs, Ys, mraAll):
     print ("TODO: Train off labels, then predict on all cells. ")
@@ -227,4 +252,10 @@ def generateAndWriteResults():
 
 
 if __name__ == '__main__':
+    global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
+    SIZE = 7
+    N_EPOCHS = 1 # 20
+    BATCH_SIZE = 8
+    RUN_LOCAL = False
+
     generateAndWriteResults()
