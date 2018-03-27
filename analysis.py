@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score
 from sklearn.manifold import TSNE
 
+from tqdm import tqdm
+
 import files
 
 def intersectOverUnion(dataA, dataB):
@@ -109,15 +111,17 @@ def show_tsne(ax, Xs, perplexity, learnRate, colors):
     fitted = TSNE(
         n_components=2, perplexity=perplexity, learning_rate=learnRate
     ).fit_transform(Xs)
-    ax.scatter(fitted[:, 0], fitted[:, 1], color=colors)
+    ax.scatter(fitted[:, 0], fitted[:, 1], color=colors, marker='x')
 
 
 # Options for TSNE parameters to explore.
-PERPLEXITY_OPTIONS = [10, 22, 33, 50, 80]
-LEARN_RATE_OPTIONS = [10, 30, 100, 300, 1000]
+# PERPLEXITY_OPTIONS = [10, 22, 33, 50, 80]
+# LEARN_RATE_OPTIONS = [10, 30, 100, 300, 1000]
+PERPLEXITY_OPTIONS = [10]
+LEARN_RATE_OPTIONS = [300]
 
 def simpleTSNE():
-    SZ = 7
+    SZ = 5
     PAD = SZ // 2
     mra = files.loadMRA()
     labels = files.loadLabels()
@@ -134,14 +138,17 @@ def simpleTSNE():
 
     print (Xs.shape)
 
-    ax = clean_subplots(5, 5)
-    for i, perplexity in enumerate(PERPLEXITY_OPTIONS):
+    ax = clean_subplots(len(PERPLEXITY_OPTIONS), len(LEARN_RATE_OPTIONS))
+    for i in tqdm(range(len(PERPLEXITY_OPTIONS))):
+        perplexity = PERPLEXITY_OPTIONS[i]
         ax[i][0].get_yaxis().set_visible(True)
         ax[i][0].set_ylabel("Perplexity = %d" % perplexity)
-        for j, learnRate in enumerate(LEARN_RATE_OPTIONS):
+        for j in tqdm(range(len(LEARN_RATE_OPTIONS))):
+            learnRate = LEARN_RATE_OPTIONS[j]
             if i == 0:
                 ax[0][j].set_title("Learn rate = %d" % learnRate)
             show_tsne(ax[i][j], xPoints, perplexity, learnRate, colours)
+    plt.show()
 
 
 

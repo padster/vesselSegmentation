@@ -85,7 +85,7 @@ def runOne(trainX, trainY, testX, testY):
 
     # lastAcc = 0.0
     costs = []
-    with tf.Session() as sess:
+    with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
         optimizer, cost,
         sess.run(tf.global_variables_initializer())
         start_time = datetime.datetime.now()
