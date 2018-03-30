@@ -13,7 +13,7 @@ N_FOLDS = 2 # Train on 1/2, Test on 1/2
 N_REPEATS = 5 # K-fold this many times
 RANDOM_SEED = 194981
 
-ERROR_WEIGHT = -0.5 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
+ERROR_WEIGHT = -5 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
 ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 
 # SET IN MAIN:
@@ -22,7 +22,7 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.0003 # 0.03
+LEARNING_RATE = 0.0001 # 0.03
 DROPOUT_RATE = 0.7
 
 HACK_GUESSES = []
@@ -131,7 +131,7 @@ def runOne(trainX, trainY, testX, testY, runID):
                 totalCost += _cost
                 totalCorr += _corr
 
-            print (">> Epoch %d had TRAIN loss %f\t#Correct = %d/%d = %f" % (
+            print (">> Epoch %d had TRAIN loss: %f\t#Correct = %d/%d = %f" % (
                 epoch, totalCost, totalCorr, len(trainY), totalCorr / len(trainY)
             ))
 
@@ -261,8 +261,8 @@ def generateAndWriteResults():
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
-    N_EPOCHS = 40
-    BATCH_SIZE = 16
+    N_EPOCHS = 50
+    BATCH_SIZE = 10
     RUN_LOCAL = False
 
     generateAndWriteResults()
