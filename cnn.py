@@ -9,7 +9,7 @@ import datetime
 import files
 import viz
 
-N_FOLDS = 2 # Train on 3/4, Test on 1/4
+N_FOLDS = 2 # Train on 1/2, Test on 1/2
 N_REPEATS = 5 # K-fold this many times
 RANDOM_SEED = 194981
 
@@ -78,6 +78,24 @@ def flatCube(data):
     s = data.shape
     return data.reshape((s[0], s[1] * s[2] * s[3]))
 
+# Given true and predicted Y, generate the scores we care about
+def genScores(trueY, predicted):
+    n = len(trueY)
+    assert len(predicted) == n
+    trueY = (np.array(trueY) > 0.5)
+    predY = (np.array(predicted) > 0.5)
+    TP = np.sum(  predY  &   trueY )
+    FP = np.sum(  predY  & (~trueY))
+    TN = np.sum((~predY) & (~trueY))
+    FN = np.sum((~predY) &   trueY )
+    return [
+        (TP + TN) / (TP + TN + FP + FN), # Accuracy
+        (TP) / (TP + FN), # Sensitivity
+        (TN) / (TN + FP), # Specificity
+        (TP + TP) / (TP + TP + FP + FN), # F1
+        roc_auc_score(trueY, predicted)
+    ]
+
 # As an example, run CNN on these given labels and test data, return the score.
 def runOne(trainX, trainY, testX, testY, firstRun):
     epochs = N_EPOCHS
@@ -97,23 +115,21 @@ def runOne(trainX, trainY, testX, testY, firstRun):
             start_time_epoch = datetime.datetime.now()
             print('Epoch %d started' % (epoch))
 
-            # mini batch
+            # mini batch for trianing set:
             totalCost, totalCorr = 0.0, 0
             for itr in range(iterations):
                 mini_batch_x = trainX[itr*batchSize: (itr+1)*batchSize]
                 mini_batch_y = trainY[itr*batchSize: (itr+1)*batchSize]
-
                 batchYOneshot = (np.column_stack((mini_batch_y, mini_batch_y)) == [0, 1]) * 1
-
                 _optimizer, _cost, _corr = sess.run([optimizer, cost, numCorrect], feed_dict={xInput: mini_batch_x, yInput: batchYOneshot})
                 totalCost += _cost
                 totalCorr += _corr
 
-            print (">> Epoch %d had train loss %f, #Correct = %d / %d = %f" % (
+            print (">> Epoch %d had TRAIN loss %f\t#Correct = %d/%d = %f" % (
                 epoch, totalCost, totalCorr, len(trainY), totalCorr / len(trainY)
             ))
 
-            #  using mini batch in case not enough memory
+            # Run against test set:
             totalCost, totalCorr = 0.0, 0
             itrs = int(len(testY)/batchSize) + 1
             for itr in range(itrs):
@@ -127,8 +143,8 @@ def runOne(trainX, trainY, testX, testY, firstRun):
                 totalCorr += _corr
 
             end_time_epoch = datetime.datetime.now()
-            print('>> Testing loss: %f\t#Correct = %d/%d = %f\tTime elapsed: %s' % (
-                totalCost, totalCorr, len(testY), totalCorr / len(testY), str(end_time_epoch - start_time_epoch)
+            print('>> Epoch %d had TEST loss: %f\t#Correct = %d/%d = %f\tTime elapsed: %s' % (
+                epoch, totalCost, totalCorr, len(testY), totalCorr / len(testY), str(end_time_epoch - start_time_epoch)
             ))
             costs.append(totalCost)
             corrs.append(totalCorr/len(testY))
@@ -142,10 +158,10 @@ def runOne(trainX, trainY, testX, testY, firstRun):
         testProbs = np.array(testProbs)[:, 1].tolist()
         testCorr = testCorr / len(testY)
 
-    HACK_GUESSES.extend(testProbs)
-    HACK_COSTS.append(costs)
-    HACK_CORRS.append(corrs)
-    return testCorr, roc_auc_score(testY, testProbs)
+    # HACK_GUESSES.extend(testProbs)
+    # HACK_COSTS.append(costs)
+    # HACK_CORRS.append(corrs)
+    return costs, corrs, genScores(testY, testProbs) # testCorr, roc_auc_score(testY, testProbs)
 
 def runKFold(Xs, Ys):
     """
@@ -159,24 +175,25 @@ def runKFold(Xs, Ys):
     rskf = RepeatedStratifiedKFold(n_splits=N_FOLDS, n_repeats=N_REPEATS, random_state=RANDOM_SEED)
     splits = [(a, b) for a, b in rskf.split(Xs, Ys)]
 
-    allCorrect, allAUC = [], []
+    allCosts, allCorrs, allScores = [], [], []
     for i, (trainIdx, testIdx) in enumerate(splits):
         print ("Split %d / %d" % (i + 1, len(splits)))
         trainX, trainY = Xs[trainIdx], Ys[trainIdx]
         testX, testY = Xs[testIdx], Ys[testIdx]
-        correct, auc = runOne(trainX, trainY, testX, testY, firstRun=(i==0))
-        allCorrect.append(correct)
-        allAUC.append(auc)
-        print ("Correct / AUC = %.3f / %.3f" % (allCorrect[-1], allAUC[-1]))
+        runCosts, runCorrs, runScores = runOne(trainX, trainY, testX, testY, firstRun=(i==0))
+        allCosts.append(runCosts)
+        allCorrs.append(runCorrs)
+        allScores.append(runScores)
+        print ("Split %d scores = %s" % (i + 1, str(runScores)))
 
 
     ax = viz.clean_subplots(1, 2, show=RUN_LOCAL)
     ax[0][0].set_title("Loss over epochs, per split")
-    ax[0][0].plot(np.array(HACK_COSTS).T)
+    ax[0][0].plot(np.array(allCosts).T)
     ax[0][1].set_title("%Correct over epochs, per split ")
-    ax[0][1].plot(np.array(HACK_CORRS).T)
+    ax[0][1].plot(np.array(allCorrs).T)
 
-    image_path = "LossAndCorrect"
+    image_path = "images/LossAndCorrect.png"
     plt.gcf().set_size_inches(18.5, 10.5)
     plt.savefig(image_path)
     print ("Image saved to %s" % str(image_path))
@@ -184,18 +201,7 @@ def runKFold(Xs, Ys):
     if RUN_LOCAL:
         plt.show()
 
-    """
-    HG = np.array(HACK_GUESSES)
-    for i in range(10):
-        lBound = i / 10.0
-        uBound = lBound + 0.1
-        print ("%0.1f - %0.1f = %d" % (lBound, uBound, ((lBound <= HG) & (HG < uBound)).sum()))
-    plt.hist(HACK_GUESSES)
-    plt.show()
-    """
-
-    print ("Average test correct: %.3f" % (np.mean(np.array(allCorrect))))
-    print ("Average AUC: %.3f " % (np.mean(np.array(allAUC))))
+    print ("Average scores: %s" % (np.mean(allScores, axis=0)))
 
 def generatePrediction(Xs, Ys, mraAll):
     print ("TODO: Train off labels, then predict on all cells. ")
@@ -249,8 +255,8 @@ def generateAndWriteResults():
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
-    N_EPOCHS = 30
-    BATCH_SIZE = 8
+    N_EPOCHS = 40
+    BATCH_SIZE = 16
     RUN_LOCAL = False
 
     generateAndWriteResults()
