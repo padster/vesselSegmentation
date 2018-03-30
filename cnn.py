@@ -13,6 +13,9 @@ N_FOLDS = 2 # Train on 1/2, Test on 1/2
 N_REPEATS = 5 # K-fold this many times
 RANDOM_SEED = 194981
 
+ERROR_WEIGHT = -0.5 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
+ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
+
 # SET IN MAIN:
 #SIZE = 0
 #N_EPOCHS = 0
@@ -62,7 +65,10 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
         predictedProbs = tf.nn.softmax(prediction)
 
     with tf.name_scope("cross_entropy"):
-        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=yInput))
+        # cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=yInput))
+        cost = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
+            targets=yInput, logits=prediction, pos_weight=ERROR_WEIGHT_FRAC
+        ))
 
     with tf.name_scope("training"):
         optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
@@ -97,7 +103,7 @@ def genScores(trueY, predicted):
     ]
 
 # As an example, run CNN on these given labels and test data, return the score.
-def runOne(trainX, trainY, testX, testY, firstRun):
+def runOne(trainX, trainY, testX, testY, runID):
     epochs = N_EPOCHS
     batchSize = BATCH_SIZE
 
@@ -113,7 +119,7 @@ def runOne(trainX, trainY, testX, testY, firstRun):
         # run epochs
         for epoch in range(epochs):
             start_time_epoch = datetime.datetime.now()
-            print('Epoch %d started' % (epoch))
+            print('Split %d, Epoch %d started' % (runID, epoch))
 
             # mini batch for trianing set:
             totalCost, totalCorr = 0.0, 0
@@ -143,7 +149,7 @@ def runOne(trainX, trainY, testX, testY, firstRun):
                 totalCorr += _corr
 
             end_time_epoch = datetime.datetime.now()
-            print('>> Epoch %d had TEST loss: %f\t#Correct = %d/%d = %f\tTime elapsed: %s' % (
+            print('>> Epoch %d had  TEST loss: %f\t#Correct = %d/%d = %f\tTime elapsed: %s' % (
                 epoch, totalCost, totalCorr, len(testY), totalCorr / len(testY), str(end_time_epoch - start_time_epoch)
             ))
             costs.append(totalCost)
@@ -180,7 +186,7 @@ def runKFold(Xs, Ys):
         print ("Split %d / %d" % (i + 1, len(splits)))
         trainX, trainY = Xs[trainIdx], Ys[trainIdx]
         testX, testY = Xs[testIdx], Ys[testIdx]
-        runCosts, runCorrs, runScores = runOne(trainX, trainY, testX, testY, firstRun=(i==0))
+        runCosts, runCorrs, runScores = runOne(trainX, trainY, testX, testY, i)
         allCosts.append(runCosts)
         allCorrs.append(runCorrs)
         allScores.append(runScores)
