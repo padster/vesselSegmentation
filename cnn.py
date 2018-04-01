@@ -24,7 +24,7 @@ N_REPEATS = 5 if RUN_AWS else 1 # K-fold this many times
 RANDOM_SEED = 194981
 N_CHANNELS = 4 # Intensity, EM, JV, PC
 
-ERROR_WEIGHT = -5 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
+ERROR_WEIGHT = -6 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
 ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 
 # SET IN MAIN:
@@ -33,8 +33,8 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.0001 # 0.03
-DROPOUT_RATE = 0.7
+LEARNING_RATE = 0.0003 # 0.03
+DROPOUT_RATE = 0.4
 
 HACK_GUESSES = []
 HACK_COSTS = []
@@ -45,11 +45,13 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
     xInput = tf.placeholder(tf.float32, shape=[None, SIZE, SIZE, SIZE, nChannels])
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
 
+    nFilt = [64, 128, 128]
+
     with tf.name_scope("layer_a"):
         # conv => 7*7*7
-        conv1 = tf.layers.conv3d(inputs=xInput, filters=32, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
         # conv => 7*7*7
-        conv2 = tf.layers.conv3d(inputs=conv1, filters=64, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
         # pool => 3*3*3
         pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[2,2,2], strides=2)
 
@@ -67,8 +69,8 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
         cnn3d_bn = tf.layers.batch_normalization(inputs=pool3, training=True)
 
     with tf.name_scope("fully_con"):
-        flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*64])
-        dense = tf.layers.dense(inputs=flattening, units=64, activation=tf.nn.relu)
+        flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*nFilt[1]])
+        dense = tf.layers.dense(inputs=flattening, units=nFilt[2], activation=tf.nn.relu)
         dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=True)
 
     with tf.name_scope("y_conv"):
@@ -150,8 +152,8 @@ def runOne(trainX, trainY, testX, testY, runID):
             totalCost, totalCorr = 0.0, 0
             itrs = int(len(testY)/batchSize) + 1
             for itr in range(itrs):
-                mini_batch_x_test = trainX[itr*batchSize: (itr+1)*batchSize]
-                mini_batch_y_test = trainY[itr*batchSize: (itr+1)*batchSize]
+                mini_batch_x_test = testX[itr*batchSize: (itr+1)*batchSize]
+                mini_batch_y_test = testY[itr*batchSize: (itr+1)*batchSize]
 
                 batchYOneshotTest = (np.column_stack((mini_batch_y_test, mini_batch_y_test)) == [0, 1]) * 1
 
