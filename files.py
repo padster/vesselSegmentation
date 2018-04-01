@@ -14,6 +14,8 @@ def loadEM(path='data/Normal001-MRA-EM.mat'):
     return loadMat(path, 'vessProb')
 def loadJV(path='data/Normal001-MRA-JV.mat'):
     return loadMat(path, 'jVessel')
+def loadPC(path='data/Normal001-MRA-PC.mat'):
+    return loadMat(path, 'PC')
 def loadRF(path='data/Normal001-MRA-RF.mat'):
     return loadMat(path, 'forest')
 
@@ -22,7 +24,7 @@ def loadLabels(path='data/Normal001-MRA-labels.mat'):
     return loadMat(path, 'coordTable')
 
 # Given [X Y Z 0/1-label], and intensity, pick out cubes (of size CUBE_SZ) around the centres.
-def convertToInputs(mra, labels, pad=PAD):
+def convertToInputs(data, labels, pad=PAD):
     rows, cols = labels.shape
     assert cols == 4
     sz = 2 * pad + 1
@@ -33,12 +35,13 @@ def convertToInputs(mra, labels, pad=PAD):
         x -= 1
         y -= 1
         z -= 1
-        xCells = mra[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1]
-        if xCells.shape == (sz, sz, sz):
+        xCells = data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :]
+        if xCells.shape == (sz, sz, sz, data.shape[3]):
             Xs.append(xCells)
             Ys.append(label)
         else:
-            print("Skipping boundary point %s" % str(labels[row]))
+            # print("Skipping boundary point %s" % str(labels[row]))
+            pass
     return np.array(Xs), np.array(Ys)
 
 # Given full volume, split up into cubes the same size as the inputs
@@ -60,7 +63,7 @@ def fillPredictions(result, predictions):
 
     if pad is None:
         pad = PAD
-        
+
     predictions = predictions.reshape( (nX - 2*pad, nY - 2*pad, nZ - 2*pad) )
     result[pad:nX-pad, pad:nY-pad, pad:nZ-pad] = predictions
     return result

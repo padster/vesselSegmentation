@@ -9,9 +9,20 @@ import datetime
 import files
 import viz
 
+# TODO - argparse?
+import sys
+RUN_AWS = "--local" not in sys.argv
+ALL_FEAT = "--features" in sys.argv
+print ("====\nTarget: %s\nFeatures: %s\n====\n" % (
+    "AWS" if RUN_AWS else "Local",
+    "All" if ALL_FEAT else "Intensity",
+))
+
+
 N_FOLDS = 2 # Train on 1/2, Test on 1/2
-N_REPEATS = 5 # K-fold this many times
+N_REPEATS = 5 if RUN_AWS else 1 # K-fold this many times
 RANDOM_SEED = 194981
+N_CHANNELS = 4 # Intensity, EM, JV, PC
 
 ERROR_WEIGHT = -5 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
 ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
@@ -30,13 +41,13 @@ HACK_COSTS = []
 HACK_CORRS = []
 
 def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
-    xInput = tf.placeholder(tf.float32, shape=[None, SIZE, SIZE, SIZE])
-    xInputAsOneChannel = tf.expand_dims(xInput, -1)
+    nChannels = N_CHANNELS if ALL_FEAT else 1
+    xInput = tf.placeholder(tf.float32, shape=[None, SIZE, SIZE, SIZE, nChannels])
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
 
     with tf.name_scope("layer_a"):
         # conv => 7*7*7
-        conv1 = tf.layers.conv3d(inputs=xInputAsOneChannel, filters=32, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        conv1 = tf.layers.conv3d(inputs=xInput, filters=32, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
         # conv => 7*7*7
         conv2 = tf.layers.conv3d(inputs=conv1, filters=64, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
         # pool => 3*3*3
@@ -193,7 +204,7 @@ def runKFold(Xs, Ys):
         print ("Split %d scores = %s" % (i + 1, str(runScores)))
 
 
-    ax = viz.clean_subplots(1, 2, show=RUN_LOCAL)
+    ax = viz.clean_subplots(1, 2, show=(not RUN_AWS))
     ax[0][0].set_title("Loss over epochs, per split")
     ax[0][0].plot(np.array(allCosts).T)
     ax[0][1].set_title("%Correct over epochs, per split ")
@@ -204,7 +215,7 @@ def runKFold(Xs, Ys):
     plt.savefig(image_path)
     print ("Image saved to %s" % str(image_path))
 
-    if RUN_LOCAL:
+    if not RUN_AWS:
         plt.show()
 
     print ("Average scores: %s" % (np.mean(allScores, axis=0)))
@@ -249,9 +260,21 @@ def generatePrediction(Xs, Ys, mraAll):
 
 # TODO: document
 def generateAndWriteResults():
-    mra = files.loadMRA()
+    print ("Loading volume intensitites...")
+    data = files.loadMRA()
+    if ALL_FEAT:
+        print ("Loading features...")
+        featEM, featJV, featPC = files.loadEM(), files.loadJV(), files.loadPC()
+        assert data.shape == featEM.shape
+        assert data.shape == featJV.shape
+        assert data.shape == featPC.shape
+        data = np.stack([data, featEM, featJV, featPC], axis=-1)
+    else:
+        data = np.stack([data], axis=-1)
+    print ("Input data loaded, shape = %s" % (str(data.shape)))
+
     labels = files.loadLabels()
-    Xs, Ys = files.convertToInputs(mra, labels, pad=(SIZE-1)//2)
+    Xs, Ys = files.convertToInputs(data, labels, pad=(SIZE-1)//2)
     print ("%d samples" % len(Xs))
     runKFold(Xs, Ys)
     # prediction = generatePrediction(Xs, Ys, mra)
@@ -263,6 +286,5 @@ if __name__ == '__main__':
     SIZE = 7
     N_EPOCHS = 50
     BATCH_SIZE = 10
-    RUN_LOCAL = False
 
     generateAndWriteResults()

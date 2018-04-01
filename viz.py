@@ -15,7 +15,8 @@ def clean_subplots(r, c, pad=0.05, show=True):
         ax.append(row)
     f.subplots_adjust(left=pad, right=1.0-pad, top=1.0-pad, bottom=pad, hspace=pad)
     try:
-        plt.get_current_fig_manager().window.showMaximized()
+        if show:
+            plt.get_current_fig_manager().window.showMaximized()
     except AttributeError:
         pass # Can't maximize, sorry :(
     return ax
