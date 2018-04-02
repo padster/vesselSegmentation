@@ -310,7 +310,7 @@ def generateAndWriteNet(save):
     print ("%d samples" % len(Xs))
     # runKFold(Xs, Ys)
     if save:
-        path = "data/cnn_%s.ckpt" % (todayStr())
+        path = "network/cnn_%s.ckpt" % (todayStr())
         trainAndSave(Xs, Ys, path)
 
 def loadAndWritePrediction(savePath):
@@ -331,12 +331,14 @@ def loadAndWritePrediction(savePath):
             for y in tqdm(range(startY, endY)):
                 dataAsInput = files.convertVolumeStack(data, PAD, x, y)
                 preds = sess.run(predictedProbs, feed_dict={xInput: dataAsInput})
+                preds = preds[:, 1]
                 allPreds.extend(preds.tolist())
         allPreds = np.array(allPreds)
         print ("Predicted shape: " + str(allPreds.shape))
 
-    result = np.zeros(mraAll.shape)
-    result = files.fillPredictions(result, allPreds)
+    dShape = data.shape
+    result = np.zeros((dShape[0], dShape[1], dShape[2]))
+    result = files.fillPredictions(result, allPreds, pad=PAD)
     files.writePrediction("data/Normal001-MRA-CNN.mat", "cnn", result)
 
 
@@ -347,6 +349,6 @@ if __name__ == '__main__':
     BATCH_SIZE = 10
 
     if LOAD_NET:
-        loadAndWritePrediction("netowrk/cnn_2018-04-02.ckpt")
+        loadAndWritePrediction("network/cnn_2018-04-02.ckpt")
     else:
         generateAndWriteNet(SAVE_NET)
