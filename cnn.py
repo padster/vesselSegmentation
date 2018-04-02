@@ -13,9 +13,13 @@ import viz
 import sys
 RUN_AWS = "--local" not in sys.argv
 ALL_FEAT = "--features" in sys.argv
-print ("====\nTarget: %s\nFeatures: %s\n====\n" % (
+SAVE_NET = "--save" in sys.argv
+LOAD_NET = "--load" in sys.argv
+print ("====\nTarget: %s\nFeatures: %s\n%s%s====\n" % (
     "AWS" if RUN_AWS else "Local",
     "All" if ALL_FEAT else "Intensity",
+    "Loading from file\n" if LOAD_NET else "",
+    "Saving to file\n" if SAVE_NET else "",
 ))
 
 
@@ -39,6 +43,9 @@ DROPOUT_RATE = 0.4
 HACK_GUESSES = []
 HACK_COSTS = []
 HACK_CORRS = []
+
+def todayStr():
+    return datetime.datetime.today().strftime('%Y-%m-%d')
 
 def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     nChannels = N_CHANNELS if ALL_FEAT else 1
@@ -124,7 +131,6 @@ def runOne(trainX, trainY, testX, testY, runID):
 
     costs, corrs = [], []
     with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
-        optimizer, cost,
         sess.run(tf.global_variables_initializer())
         start_time = datetime.datetime.now()
 
@@ -260,33 +266,87 @@ def generatePrediction(Xs, Ys, mraAll):
     return result
     """
 
-# TODO: document
-def generateAndWriteResults():
-    print ("Loading volume intensitites...")
-    data = files.loadMRA()
-    if ALL_FEAT:
-        print ("Loading features...")
-        featEM, featJV, featPC = files.loadEM(), files.loadJV(), files.loadPC()
-        assert data.shape == featEM.shape
-        assert data.shape == featJV.shape
-        assert data.shape == featPC.shape
-        data = np.stack([data, featEM, featJV, featPC], axis=-1)
-    else:
-        data = np.stack([data], axis=-1)
-    print ("Input data loaded, shape = %s" % (str(data.shape)))
+def trainAndSave(data, labels, path):
+    epochs = N_EPOCHS
+    batchSize = BATCH_SIZE
+    xInput, yInput, optimizer, cost, numCorrect, scores = buildNetwork()
 
-    labels = files.loadLabels()
+    saver = tf.train.Saver()
+
+    with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
+        sess.run(tf.global_variables_initializer())
+        start_time = datetime.datetime.now()
+
+        iterations = int(len(labels)/batchSize) + 1
+        # run epochs
+        for epoch in range(epochs):
+            start_time_epoch = datetime.datetime.now()
+            print('Saving epoch %d started' % (epoch))
+
+            # mini batch for trianing set:
+            totalCost, totalCorr = 0.0, 0
+            for itr in range(iterations):
+                mini_batch_x = data[itr*batchSize: (itr+1)*batchSize]
+                mini_batch_y = labels[itr*batchSize: (itr+1)*batchSize]
+                batchYOneshot = (np.column_stack((mini_batch_y, mini_batch_y)) == [0, 1]) * 1
+                _optimizer, _cost, _corr = sess.run([optimizer, cost, numCorrect], feed_dict={xInput: mini_batch_x, yInput: batchYOneshot})
+                totalCost += _cost
+                totalCorr += _corr
+
+            print (">> Epoch %d had TRAIN loss: %f\t#Correct = %d/%d = %f" % (
+                epoch, totalCost, totalCorr, len(labels), totalCorr / len(labels)
+            ))
+
+        end_time = datetime.datetime.now()
+        print('Time elapse: ', str(end_time - start_time))
+        savePath = saver.save(sess, path)
+        print('Model saved to: %s ' % savePath)
+
+
+# TODO: document
+def generateAndWriteNet(save):
+    data, labels = files.loadAllInputs(ALL_FEAT)
     Xs, Ys = files.convertToInputs(data, labels, pad=(SIZE-1)//2)
     print ("%d samples" % len(Xs))
-    runKFold(Xs, Ys)
-    # prediction = generatePrediction(Xs, Ys, mra)
-    # files.writePrediction("data/Normal001-MRA-CNN.mat", "forest", prediction)
+    # runKFold(Xs, Ys)
+    if save:
+        path = "data/cnn_%s.ckpt" % (todayStr())
+        trainAndSave(Xs, Ys, path)
+
+def loadAndWritePrediction(savePath):
+    PAD = (SIZE-1)//2
+    data, labels = files.loadAllInputs(ALL_FEAT)
+
+    startX, endX = PAD, data.shape[0] - PAD
+    startY, endY = PAD, data.shape[0] - PAD
+
+    xInput, yInput, _, _, _, predictedProbs = buildNetwork()
+    saver = tf.train.Saver()
+    with tf.Session() as sess:
+        # Restore variables from disk.
+        saver.restore(sess, savePath)
+
+        allPreds = []
+        for x in tqdm(range(startX, endX)):
+            for y in tqdm(range(startY, endY)):
+                dataAsInput = files.convertVolumeStack(data, PAD, x, y)
+                preds = sess.run(predictedProbs, feed_dict={xInput: dataAsInput})
+                allPreds.extend(preds.tolist())
+        allPreds = np.array(allPreds)
+        print ("Predicted shape: " + str(allPreds.shape))
+
+    result = np.zeros(mraAll.shape)
+    result = files.fillPredictions(result, allPreds)
+    files.writePrediction("data/Normal001-MRA-CNN.mat", "cnn", result)
 
 
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
-    N_EPOCHS = 50
+    N_EPOCHS = 50 if RUN_AWS else 2
     BATCH_SIZE = 10
 
-    generateAndWriteResults()
+    if LOAD_NET:
+        loadAndWritePrediction("netowrk/cnn_2018-04-02.ckpt")
+    else:
+        generateAndWriteNet(SAVE_NET)

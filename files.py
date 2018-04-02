@@ -1,9 +1,6 @@
 import numpy as np
 import scipy.io
 
-CUBE_SZ = 3
-PAD = (CUBE_SZ - 1) // 2
-
 def loadMat(path, name):
     return scipy.io.loadmat(path).get(name)
 
@@ -24,7 +21,7 @@ def loadLabels(path='data/Normal001-MRA-labels.mat'):
     return loadMat(path, 'coordTable')
 
 # Given [X Y Z 0/1-label], and intensity, pick out cubes (of size CUBE_SZ) around the centres.
-def convertToInputs(data, labels, pad=PAD):
+def convertToInputs(data, labels, pad):
     rows, cols = labels.shape
     assert cols == 4
     sz = 2 * pad + 1
@@ -44,25 +41,52 @@ def convertToInputs(data, labels, pad=PAD):
             pass
     return np.array(Xs), np.array(Ys)
 
-# Given full volume, split up into cubes the same size as the inputs
-def convertEntireVolume(mra, pad=None):
-    nX, nY, nZ = mra.shape
+# Load intensities, plus optionally other features as second channels
+def loadAllInputs(allFeatures):
+    print ("Loading volume intensitites...")
+    data = loadMRA()
+    if allFeatures:
+        print ("Loading features...")
+        featEM, featJV, featPC = loadEM(), loadJV(), loadPC()
+        assert data.shape == featEM.shape
+        assert data.shape == featJV.shape
+        assert data.shape == featPC.shape
+        data = np.stack([data, featEM, featJV, featPC], axis=-1)
+    else:
+        data = np.stack([data], axis=-1)
+    print ("Input data loaded, shape = %s" % (str(data.shape)))
+    labels = loadLabels()
+    return data, labels
 
-    if pad is None:
-        pad = PAD
+
+# Given full volume, split up into cubes the same size as the inputs
+# HACK - doesn't fit into memory
+"""
+def convertEntireVolume(data):
+    nX, nY, nZ, nChan = data.shape
 
     Xs = []
     for x in range(pad, nX - pad):
         for y in range(pad, nY - pad):
             for z in range(pad, nZ - pad):
-                Xs.append(mra[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1])
+                Xs.append(data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :])
+    return np.array(Xs)
+"""
+
+# Given full volume, split up into a subset of the cubes the same size as the inputs
+def convertVolumeStack(data, pad, x, y):
+    nX, nY, nZ, nChan = data.shape
+
+    Xs = []
+    # for x in range(x, nX - pad):
+        # for y in range(pad, nY - pad):
+    for z in range(pad, nZ - pad):
+        Xs.append(data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :])
     return np.array(Xs)
 
-def fillPredictions(result, predictions):
-    nX, nY, nZ = result.shape
 
-    if pad is None:
-        pad = PAD
+def fillPredictions(result, predictions, pad):
+    nX, nY, nZ = result.shape
 
     predictions = predictions.reshape( (nX - 2*pad, nY - 2*pad, nZ - 2*pad) )
     result[pad:nX-pad, pad:nY-pad, pad:nZ-pad] = predictions
