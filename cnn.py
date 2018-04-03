@@ -342,13 +342,46 @@ def loadAndWritePrediction(savePath):
     files.writePrediction("data/Normal001-MRA-CNN.mat", "cnn", result)
 
 
+def singleBrain(scanID):
+    PAD = (SIZE-1)//2
+    data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
+    trainX, trainY = files.convertToInputs(data, labelsTrain, pad=PAD)
+    testX,   testY = files.convertToInputs(data,  labelsTest, pad=PAD)
+    print ("%d train samples, %d test" % (len(trainX), len(testX)))
+    runOne(trainX, trainY, testX, testY, 0)
+    # if save:
+        # path = "network/cnn_%s.ckpt" % (todayStr())
+        # trainAndSave(Xs, Ys, path)
+
+def brainToBrain(fromIDs, toID):
+    PAD = (SIZE-1)//2
+    trainX, trainY = None, None
+    print ("Loading points from %d inputs..." % (len(fromIDs)))
+    for fromID in fromIDs:
+        print ("  ... loading %s" % (fromID))
+        fromData, fromLabelA, fromLabelB = files.loadAllInputsUpdated(fromID, ALL_FEAT)
+        fromLabels = np.concatenate((fromLabelA, fromLabelB))
+        fromX, fromY = files.convertToInputs(fromData, fromLabels, pad=PAD)
+        if trainX is None:
+            trainX, trainY = fromX, fromY
+        else:
+            trainX = np.concatenate((trainX, fromX))
+            trainY = np.concatenate((trainY, fromY))
+
+    toData, toLabelA, toLabelB = files.loadAllInputsUpdated(toID, ALL_FEAT)
+    toLabels = np.concatenate((toLabelA, toLabelB))
+    toX, toY = files.convertToInputs(toData, toLabels, pad=PAD)
+    runOne(trainX, trainY, toX, toY, 0)
+
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
     N_EPOCHS = 50 if RUN_AWS else 2
     BATCH_SIZE = 10
 
-    if LOAD_NET:
-        loadAndWritePrediction("network/cnn_2018-04-02.ckpt")
-    else:
-        generateAndWriteNet(SAVE_NET)
+    singleBrain('002')
+
+    # if LOAD_NET:
+        # loadAndWritePrediction("network/cnn_2018-04-02.ckpt")
+    # else:
+        # generateAndWriteNet(SAVE_NET)

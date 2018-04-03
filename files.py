@@ -15,6 +15,12 @@ def loadPC(path='data/Normal001-MRA-PC.mat'):
     return loadMat(path, 'PC')
 def loadRF(path='data/Normal001-MRA-RF.mat'):
     return loadMat(path, 'forest')
+def loadCNN(path='data/Normal001-MRA-CNN.mat'):
+    return loadMat(path, 'cnn')
+
+def loadFeat(path):
+    mat = scipy.io.loadmat(path)
+    return mat.get('volMRA'), mat.get('EM'), mat.get('JV'), mat.get('PC')
 
 # Loads the 2d [X Y Z 0/1-label] matrix for vessel annotations
 def loadLabels(path='data/Normal001-MRA-labels.mat'):
@@ -57,6 +63,24 @@ def loadAllInputs(allFeatures):
     print ("Input data loaded, shape = %s" % (str(data.shape)))
     labels = loadLabels()
     return data, labels
+
+def loadAllInputsUpdated(scanID, allFeatures):
+    fsPath = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
+    print ("Loading data for scan %s" % (scanID))
+    data, featEM, featJV, featPC = loadFeat(fsPath)
+    assert data.shape == featEM.shape
+    assert data.shape == featJV.shape
+    assert data.shape == featPC.shape
+
+    if allFeatures:
+        data = np.stack([data, featEM, featJV, featPC], axis=-1)
+    else:
+        data = np.stack([data], axis=-1)
+    print ("Input data loaded, shape = %s" % (str(data.shape)))
+
+    lTrainPath = 'data/%s/Normal%s-MRA_annotationVess_training_C.mat' % (scanID, scanID)
+    lTestPath  = 'data/%s/Normal%s-MRA_annotationVess_testing_C.mat'  % (scanID, scanID)
+    return data, loadLabels(lTrainPath), loadLabels(lTestPath)
 
 
 # Given full volume, split up into cubes the same size as the inputs

@@ -69,21 +69,47 @@ def checkEMJVAgreement():
 
 
 def rfAnalysis():
+    print ("\nRF Data:")
     # run some basic analysis on written results
     emData = files.loadEM().flatten()
     jvData = files.loadJV().flatten()
-    rfData = files.loadRF().flatten()
-    emData = (emData < 0.5)
-    jvData = (jvData < 0.5)
+    rfData = 1.0 - files.loadRF().flatten()
+    print ("Pearson R coeff for RF-EM: %f" % (np.corrcoef(rfData, emData)[0, 1]))
+    print ("Pearson R coeff for RF-JV: %f" % (np.corrcoef(rfData, jvData)[0, 1]))
+    emPre, jvPre = np.copy(emData), np.copy(jvData)
+    emData = (emData > 0.5)
+    jvData = (jvData > 0.5)
     print ("AUC of RF for EM: %f" % roc_auc_score(emData, rfData))
     print ("AUC of RF for JV: %f" % roc_auc_score(jvData, rfData))
     rfData = (rfData > 0.5)
     print ("Agreement EM-RF: %f" % (np.sum(emData == rfData) / len(rfData)))
     print ("Agreement JV-RF: %f" % (np.sum(jvData == rfData) / len(rfData)))
     print ("Agreement EM-JV: %f" % (np.sum(emData == jvData) / len(rfData)))
-    print ("IOU EM-RF:  %f" % intersectOverUnion(emData, rfData))
-    print ("IOU JV-RF:  %f" % intersectOverUnion(jvData, rfData))
-    print ("IOU EM-JV:  %f" % intersectOverUnion(emData, jvData))
+    print ("IOU EM-RF:  %f" % intersectOverUnion(~emData, ~rfData)) # HACK - this is broken...
+    print ("IOU JV-RF:  %f" % intersectOverUnion(~jvData, ~rfData))
+    print ("IOU EM-JV:  %f" % intersectOverUnion(~emData, ~jvData))
+    return emPre, jvPre
+
+
+def cnnAnalysis(emData, jvData):
+    print ("\nCNN Data:")
+    # run some basic analysis on written results
+    cnnData = files.loadCNN().flatten()
+    print ("Pearson R coeff for CNN-EM: %f" % (np.corrcoef(cnnData, emData)[0, 1]))
+    print ("Pearson R coeff for CNN-JV: %f" % (np.corrcoef(cnnData, jvData)[0, 1]))
+    plt.scatter(cnnData[::30], jvData[::30])
+    plt.show()
+    emData = (emData > 0.5)
+    jvData = (jvData > 0.5)
+    print ("AUC of CNN for EM: %f" % roc_auc_score(emData, cnnData))
+    print ("AUC of CNN for JV: %f" % roc_auc_score(jvData, cnnData))
+    cnnData = (cnnData > 0.5)
+    print ("Agreement EM-CNN: %f" % (np.sum(emData == cnnData) / len(cnnData)))
+    print ("Agreement JV-CNN: %f" % (np.sum(jvData == cnnData) / len(cnnData)))
+    print ("Agreement EM-JV : %f" % (np.sum(emData == jvData) / len(cnnData)))
+    print ("IOU EM-CNN:  %f" % intersectOverUnion(~emData, ~cnnData)) # HACK - this is broken...
+    print ("IOU JV-CNN:  %f" % intersectOverUnion(~jvData, ~cnnData))
+    print ("IOU EM-JV :  %f" % intersectOverUnion(~emData,  ~jvData))
 
 def show_tsne(ax, Xs, perplexity, learnRate, colors):
     fitted = TSNE(
@@ -132,8 +158,11 @@ def simpleTSNE():
 
 def main():
     # checkEMJVAgreement()
-    # rfAnalysis()
-    simpleTSNE()
+    # emData, jvData = rfAnalysis()
+    emData = files.loadEM().flatten()
+    jvData = files.loadJV().flatten()
+    cnnAnalysis(emData, jvData)
+    # simpleTSNE()
 
 if __name__ == '__main__':
     main()
