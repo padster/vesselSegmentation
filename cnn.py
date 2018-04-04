@@ -338,19 +338,50 @@ def singleBrainWritePrediction(scanID):
     data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
     labels = np.vstack((labelsTrain, labelsTest))
     data, labels = files.convertToInputs(data, labels, PAD, FLIP_X, FLIP_Y)
+
     print ("Part #1: Training then saving to %s" % (networkPath))
-    trainAndSaveNet(data, labels, networkPath)
+    epochs = N_EPOCHS
+    batchSize = BATCH_SIZE
+    xInput, yInput, optimizer, cost, numCorrect, scores = buildNetwork()
 
-    print ("\n=======\nPart #2: Loading and generating all predictions")
-    startX, endX = PAD, data.shape[0] - PAD
-    startY, endY = PAD, data.shape[0] - PAD
-
-    xInput, yInput, _, _, _, predictedProbs = buildNetwork()
     saver = tf.train.Saver()
-    with tf.Session() as sess:
-        # Restore variables from disk.
-        saver.restore(sess, networkPath)
 
+    with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
+        sess.run(tf.global_variables_initializer())
+        start_time = datetime.datetime.now()
+
+        iterations = int(len(labels)/batchSize) + 1
+        # run epochs
+        for epoch in range(epochs):
+            data, labels = randomShuffle(data, labels)
+            start_time_epoch = datetime.datetime.now()
+            print('Saving epoch %d started' % (epoch))
+
+            # mini batch for trianing set:
+            totalCost, totalCorr = 0.0, 0
+            for itr in range(iterations):
+                mini_batch_x = data[itr*batchSize: (itr+1)*batchSize]
+                mini_batch_y = labels[itr*batchSize: (itr+1)*batchSize]
+                batchYOneshot = (np.column_stack((mini_batch_y, mini_batch_y)) == [0, 1]) * 1
+                _optimizer, _cost, _corr = sess.run([optimizer, cost, numCorrect], feed_dict={xInput: mini_batch_x, yInput: batchYOneshot})
+                totalCost += _cost
+                totalCorr += _corr
+
+            print (">> Epoch %d had TRAIN loss: %f\t#Correct = %5d/%5d = %f" % (
+                epoch, totalCost, totalCorr, len(labels), totalCorr / len(labels)
+            ))
+
+        end_time = datetime.datetime.now()
+        print('Time elapse: ', str(end_time - start_time))
+        savePath = saver.save(sess, path)
+        print('Model saved to: %s ' % savePath)
+
+        print ("\n=======\nPart #2: Loading and generating all predictions")
+        startX, endX = PAD, data.shape[0] - PAD
+        startY, endY = PAD, data.shape[0] - PAD
+
+        #rewrite variable names
+        xInput, yInput, predictedProbs = xInput, yInput, scores
         allPreds = []
         for x in tqdm(range(startX, endX)):
             for y in tqdm(range(startY, endY)):
@@ -362,11 +393,12 @@ def singleBrainWritePrediction(scanID):
         allPreds = np.array(allPreds)
         print ("Predicted shape: " + str(allPreds.shape))
 
-    dShape = data.shape
-    result = np.zeros((dShape[0], dShape[1], dShape[2]))
-    result = files.fillPredictions(result, allPreds, pad=PAD)
-    resultPath = "data/%s/Normal%s-MRA-CNN.mat" % (scanID, scanID)
-    files.writePrediction(resultPath, "cnn", result)
+        dShape = data.shape
+        result = np.zeros((dShape[0], dShape[1], dShape[2]))
+        result = files.fillPredictions(result, allPreds, pad=PAD)
+        resultPath = "data/%s/Normal%s-MRA-CNN.mat" % (scanID, scanID)
+        print ("Writing to %s" % (resultPath))
+        files.writePrediction(resultPath, "cnn", result)
 
 
 def brainToBrain(fromIDs, toID):
