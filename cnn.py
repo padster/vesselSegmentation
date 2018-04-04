@@ -41,8 +41,8 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.0003 # 0.03
-DROPOUT_RATE = 0.85
+LEARNING_RATE = 0.003 # 0.03
+DROPOUT_RATE = 0.65
 
 HACK_GUESSES = []
 HACK_COSTS = []
@@ -62,7 +62,8 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
 
     #nFilt = [64, 128, 128]
-    nFilt = [16, 32, 32]
+    nFilt = [64, 32, 32]
+    #nFilt = [16, 32, 32]
 
     with tf.name_scope("layer_a"):
         # conv => 7*7*7
@@ -323,7 +324,7 @@ def singleBrain(scanID):
     PAD = (SIZE-1)//2
     data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
     trainX, trainY = files.convertToInputs(data, labelsTrain, PAD, FLIP_X, FLIP_Y)
-    testX,   testY = files.convertToInputs(data,  labelsTest, PAD, FLIP_X, FLIP_Y)
+    testX,   testY = files.convertToInputs(data,  labelsTest, PAD, False, False)
     print ("%d train samples, %d test" % (len(trainX), len(testX)))
     costs, corrs, scores = runOne(trainX, trainY, testX, testY, 0)
     print ("Scores: %s" % (str(scores)))
@@ -354,7 +355,7 @@ def brainToBrain(fromIDs, toID):
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
-    N_EPOCHS = 100 if RUN_AWS else 2
+    N_EPOCHS = 40 if RUN_AWS else 2
     BATCH_SIZE = 10
 
     singleBrain('002')
