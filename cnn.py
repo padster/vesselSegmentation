@@ -333,10 +333,11 @@ def singleBrain(scanID):
         # trainAndSave(Xs, Ys, path)
 
 def singleBrainWritePrediction(scanID):
-    networkPath = "data/%s/CNN_%s.ckpt"
+    networkPath = "data/%s/CNN_%s.ckpt" % (scanID, scanID)
     PAD = (SIZE-1)//2
     data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
     labels = np.vstack((labelsTrain, labelsTest))
+    data, labels = files.convertToInputs(data, labels, PAD, FLIP_X, FLIP_Y)
     print ("Part #1: Training then saving to %s" % (networkPath))
     trainAndSaveNet(data, labels, networkPath)
 
