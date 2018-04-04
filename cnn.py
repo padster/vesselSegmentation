@@ -355,7 +355,8 @@ def singleBrainWritePrediction(scanID):
         for x in tqdm(range(startX, endX)):
             for y in tqdm(range(startY, endY)):
                 dataAsInput = files.convertVolumeStack(data, PAD, x, y)
-                preds = sess.run(predictedProbs, feed_dict={xInput: dataAsInput})
+                #preds = sess.run(predictedProbs, feed_dict={xInput: dataAsInput})
+                preds = np.zeros((len(dataAsInput), 2))
                 preds = preds[:, 1]
                 allPreds.extend(preds.tolist())
         allPreds = np.array(allPreds)
@@ -391,7 +392,7 @@ def brainToBrain(fromIDs, toID):
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
-    N_EPOCHS = 25 if RUN_AWS else 2
+    N_EPOCHS = 20 if RUN_AWS else 2
     BATCH_SIZE = 10 * (2 if FLIP_X else 1) * (2 if FLIP_Y else 1)
 
     # singleBrain('002')
