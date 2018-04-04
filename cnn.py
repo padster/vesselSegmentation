@@ -37,8 +37,8 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.001 # 0.03
-DROPOUT_RATE = 0.95
+LEARNING_RATE = 0.0003 # 0.03
+DROPOUT_RATE = 0.85
 
 HACK_GUESSES = []
 HACK_COSTS = []
@@ -53,7 +53,7 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
 
     #nFilt = [64, 128, 128]
-    nFilt = [16, 16, 32]
+    nFilt = [16, 32, 32]
 
     with tf.name_scope("layer_a"):
         # conv => 7*7*7
