@@ -164,7 +164,7 @@ def runOne(trainX, trainY, testX, testY, runID):
                 totalCost += _cost
                 totalCorr += _corr
 
-            print (">> Epoch %d had TRAIN loss: %f\t#Correct = %d/%d = %f" % (
+            print (">> Epoch %d had TRAIN loss: %f\t#Correct = %5d/%5d = %f" % (
                 epoch, totalCost, totalCorr, len(trainY), totalCorr / len(trainY)
             ))
 
@@ -182,7 +182,7 @@ def runOne(trainX, trainY, testX, testY, runID):
                 totalCorr += _corr
 
             end_time_epoch = datetime.datetime.now()
-            print('>> Epoch %d had  TEST loss: %f\t#Correct = %d/%d = %f\tTime elapsed: %s' % (
+            print('>> Epoch %d had  TEST loss: %f\t#Correct = %5d/%5d = %f\tTime elapsed: %s' % (
                 epoch, totalCost, totalCorr, len(testY), totalCorr / len(testY), str(end_time_epoch - start_time_epoch)
             ))
             costs.append(totalCost)
@@ -271,7 +271,7 @@ def trainAndSaveNet(data, labels, path):
                 totalCost += _cost
                 totalCorr += _corr
 
-            print (">> Epoch %d had TRAIN loss: %f\t#Correct = %d/%d = %f" % (
+            print (">> Epoch %d had TRAIN loss: %f\t#Correct = %5d/%5d = %f" % (
                 epoch, totalCost, totalCorr, len(labels), totalCorr / len(labels)
             ))
 
@@ -332,6 +332,41 @@ def singleBrain(scanID):
         # path = "network/cnn_%s.ckpt" % (todayStr())
         # trainAndSave(Xs, Ys, path)
 
+def singleBrainWritePrediction(scanID):
+    networkPath = "data/%s/CNN_%s.ckpt"
+    PAD = (SIZE-1)//2
+    data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
+    labels = np.vstack((labelsTrain, labelsTest))
+    print ("Part #1: Training then saving to %s" % (networkPath))
+    trainAndSaveNet(data, labels, networkPath)
+
+    print ("\n=======\nPart #2: Loading and generating all predictions")
+    startX, endX = PAD, data.shape[0] - PAD
+    startY, endY = PAD, data.shape[0] - PAD
+
+    xInput, yInput, _, _, _, predictedProbs = buildNetwork()
+    saver = tf.train.Saver()
+    with tf.Session() as sess:
+        # Restore variables from disk.
+        saver.restore(sess, networkPath)
+
+        allPreds = []
+        for x in tqdm(range(startX, endX)):
+            for y in tqdm(range(startY, endY)):
+                dataAsInput = files.convertVolumeStack(data, PAD, x, y)
+                preds = sess.run(predictedProbs, feed_dict={xInput: dataAsInput})
+                preds = preds[:, 1]
+                allPreds.extend(preds.tolist())
+        allPreds = np.array(allPreds)
+        print ("Predicted shape: " + str(allPreds.shape))
+
+    dShape = data.shape
+    result = np.zeros((dShape[0], dShape[1], dShape[2]))
+    result = files.fillPredictions(result, allPreds, pad=PAD)
+    resultPath = "data/%s/Normal%s-MRA-CNN.mat" % (scanID, scanID)
+    files.writePrediction(resultPath, "cnn", result)
+
+
 def brainToBrain(fromIDs, toID):
     PAD = (SIZE-1)//2
     trainX, trainY = None, None
@@ -358,7 +393,8 @@ if __name__ == '__main__':
     N_EPOCHS = 25 if RUN_AWS else 2
     BATCH_SIZE = 10 * (2 if FLIP_X else 1) * (2 if FLIP_Y else 1)
 
-    singleBrain('002')
+    # singleBrain('002')
+    singleBrainWritePrediction('002')
 
     # if LOAD_NET:
         # loadAndWritePrediction("network/cnn_2018-04-02.ckpt")
