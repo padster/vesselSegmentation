@@ -28,7 +28,7 @@ N_REPEATS = 5 if RUN_AWS else 1 # K-fold this many times
 RANDOM_SEED = 194981
 N_CHANNELS = 4 # Intensity, EM, JV, PC
 
-ERROR_WEIGHT = -6 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
+ERROR_WEIGHT = -4 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
 ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 
 # SET IN MAIN:
@@ -37,8 +37,8 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.0003 # 0.03
-DROPOUT_RATE = 0.4
+LEARNING_RATE = 0.001 # 0.03
+DROPOUT_RATE = 0.95
 
 HACK_GUESSES = []
 HACK_COSTS = []
@@ -52,7 +52,8 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
     xInput = tf.placeholder(tf.float32, shape=[None, SIZE, SIZE, SIZE, nChannels])
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
 
-    nFilt = [64, 128, 128]
+    #nFilt = [64, 128, 128]
+    nFilt = [16, 16, 32]
 
     with tf.name_scope("layer_a"):
         # conv => 7*7*7
@@ -348,7 +349,8 @@ def singleBrain(scanID):
     trainX, trainY = files.convertToInputs(data, labelsTrain, pad=PAD)
     testX,   testY = files.convertToInputs(data,  labelsTest, pad=PAD)
     print ("%d train samples, %d test" % (len(trainX), len(testX)))
-    runOne(trainX, trainY, testX, testY, 0)
+    costs, corrs, scores = runOne(trainX, trainY, testX, testY, 0)
+    print ("Scores: %s" % (str(scores)))
     # if save:
         # path = "network/cnn_%s.ckpt" % (todayStr())
         # trainAndSave(Xs, Ys, path)
@@ -376,7 +378,7 @@ def brainToBrain(fromIDs, toID):
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
-    N_EPOCHS = 50 if RUN_AWS else 2
+    N_EPOCHS = 100 if RUN_AWS else 2
     BATCH_SIZE = 10
 
     singleBrain('002')
