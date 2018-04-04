@@ -41,8 +41,8 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.003 # 0.03
-DROPOUT_RATE = 0.65
+LEARNING_RATE = 0.001 # 0.03
+DROPOUT_RATE = 0.75
 
 HACK_GUESSES = []
 HACK_COSTS = []
@@ -355,8 +355,8 @@ def brainToBrain(fromIDs, toID):
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
-    N_EPOCHS = 40 if RUN_AWS else 2
-    BATCH_SIZE = 10
+    N_EPOCHS = 25 if RUN_AWS else 2
+    BATCH_SIZE = 10 * (2 if FLIP_X else 1) * (2 if FLIP_Y else 1)
 
     singleBrain('002')
 
