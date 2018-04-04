@@ -15,11 +15,15 @@ RUN_AWS = "--local" not in sys.argv
 ALL_FEAT = "--features" in sys.argv
 SAVE_NET = "--save" in sys.argv
 LOAD_NET = "--load" in sys.argv
-print ("====\nTarget: %s\nFeatures: %s\n%s%s====\n" % (
+FLIP_X = "--flipx" in sys.argv
+FLIP_Y = "--flipy" in sys.argv
+print ("====\nTarget: %s\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\n====\n" % (
     "AWS" if RUN_AWS else "Local",
     "All" if ALL_FEAT else "Intensity",
     "Loading from file\n" if LOAD_NET else "",
     "Saving to file\n" if SAVE_NET else "",
+    str(FLIP_X),
+    str(FLIP_Y),
 ))
 
 
@@ -43,6 +47,11 @@ DROPOUT_RATE = 0.4
 HACK_GUESSES = []
 HACK_COSTS = []
 HACK_CORRS = []
+
+def randomShuffle(X, Y):
+    assert X.shape[0] == Y.shape[0]
+    p = np.random.permutation(X.shape[0])
+    return X[p], Y[p]
 
 def todayStr():
     return datetime.datetime.today().strftime('%Y-%m-%d')
@@ -137,6 +146,9 @@ def runOne(trainX, trainY, testX, testY, runID):
         iterations = int(len(trainY)/batchSize) + 1
         # run epochs
         for epoch in range(epochs):
+            trainX, trainY = randomShuffle(trainX, trainY)
+            testX,   testY = randomShuffle( testX,  testY)
+
             start_time_epoch = datetime.datetime.now()
             print('Split %d, Epoch %d started' % (runID, epoch))
 
@@ -228,45 +240,8 @@ def runKFold(Xs, Ys):
 
     print ("Average scores: %s" % (np.mean(allScores, axis=0)))
 
-def generatePrediction(Xs, Ys, mraAll):
-    print ("TODO: Train off labels, then predict on all cells. ")
-    """
-    print("GENERATING PRED")
-    trainD = xgb.DMatrix(flatCube(Xs), label=Ys)
-    param = {
-        'max_depth': 3,  # the maximum depth of each tree
-        'eta': 0.3,  # the training step for each iteration
-        'silent': 1,  # logging mode - quiet
-        'objective': 'binary:logistic',  # error evaluation for multiclass training
-    }
-    nRounds = 5  # the number of training iterations
 
-    # Train using only the training set:
-    trees = xgb.train(param, trainD, nRounds)
-
-    # Use the trained forest to predict the remaining positions:
-    print ("Converting entire volume to inputs...")
-    inputs = files.convertEntireVolume(mraAll)
-    print ("Shape of all inputs = ")
-    print (inputs.shape)
-    chunking = 10
-    chunk = (inputs.shape[0] + chunking - 1) // chunking
-    allPreds = []
-    for i in tqdm(range(chunking)):
-        startIdx = chunk * i
-        endIdx = min(chunk * i + chunk, inputs.shape[0])
-        testD  = xgb.DMatrix(flatCube(inputs[startIdx:endIdx]))
-        preds = trees.predict(testD)
-        allPreds.extend(preds.tolist())
-    allPreds = np.array(allPreds)
-    print ("predicted " + str(allPreds.shape))
-
-    result = np.zeros(mraAll.shape)
-    result = files.fillPredictions(result, allPreds)
-    return result
-    """
-
-def trainAndSave(data, labels, path):
+def trainAndSaveNet(data, labels, path):
     epochs = N_EPOCHS
     batchSize = BATCH_SIZE
     xInput, yInput, optimizer, cost, numCorrect, scores = buildNetwork()
@@ -280,6 +255,7 @@ def trainAndSave(data, labels, path):
         iterations = int(len(labels)/batchSize) + 1
         # run epochs
         for epoch in range(epochs):
+            data, labels = randomShuffle(data, labels)
             start_time_epoch = datetime.datetime.now()
             print('Saving epoch %d started' % (epoch))
 
@@ -306,12 +282,12 @@ def trainAndSave(data, labels, path):
 # TODO: document
 def generateAndWriteNet(save):
     data, labels = files.loadAllInputs(ALL_FEAT)
-    Xs, Ys = files.convertToInputs(data, labels, pad=(SIZE-1)//2)
+    Xs, Ys = files.convertToInputs(data, labels, (SIZE-1)//2, FLIP_X, FLIP_Y)
     print ("%d samples" % len(Xs))
     # runKFold(Xs, Ys)
     if save:
         path = "network/cnn_%s.ckpt" % (todayStr())
-        trainAndSave(Xs, Ys, path)
+        trainAndSaveNet(Xs, Ys, path)
 
 def loadAndWritePrediction(savePath):
     PAD = (SIZE-1)//2
@@ -345,8 +321,8 @@ def loadAndWritePrediction(savePath):
 def singleBrain(scanID):
     PAD = (SIZE-1)//2
     data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
-    trainX, trainY = files.convertToInputs(data, labelsTrain, pad=PAD)
-    testX,   testY = files.convertToInputs(data,  labelsTest, pad=PAD)
+    trainX, trainY = files.convertToInputs(data, labelsTrain, PAD, FLIP_X, FLIP_Y)
+    testX,   testY = files.convertToInputs(data,  labelsTest, PAD, FLIP_X, FLIP_Y)
     print ("%d train samples, %d test" % (len(trainX), len(testX)))
     runOne(trainX, trainY, testX, testY, 0)
     # if save:
@@ -361,7 +337,7 @@ def brainToBrain(fromIDs, toID):
         print ("  ... loading %s" % (fromID))
         fromData, fromLabelA, fromLabelB = files.loadAllInputsUpdated(fromID, ALL_FEAT)
         fromLabels = np.concatenate((fromLabelA, fromLabelB))
-        fromX, fromY = files.convertToInputs(fromData, fromLabels, pad=PAD)
+        fromX, fromY = files.convertToInputs(fromData, fromLabels, PAD, FLIP_X, FLIP_Y)
         if trainX is None:
             trainX, trainY = fromX, fromY
         else:
@@ -370,7 +346,7 @@ def brainToBrain(fromIDs, toID):
 
     toData, toLabelA, toLabelB = files.loadAllInputsUpdated(toID, ALL_FEAT)
     toLabels = np.concatenate((toLabelA, toLabelB))
-    toX, toY = files.convertToInputs(toData, toLabels, pad=PAD)
+    toX, toY = files.convertToInputs(toData, toLabels, PAD, FLIP_X, FLIP_Y)
     runOne(trainX, trainY, toX, toY, 0)
 
 if __name__ == '__main__':

@@ -27,7 +27,7 @@ def loadLabels(path='data/Normal001-MRA-labels.mat'):
     return loadMat(path, 'coordTable')
 
 # Given [X Y Z 0/1-label], and intensity, pick out cubes (of size CUBE_SZ) around the centres.
-def convertToInputs(data, labels, pad):
+def convertToInputs(data, labels, pad, flipX, flipY):
     rows, cols = labels.shape
     assert cols == 4
     sz = 2 * pad + 1
@@ -35,13 +35,21 @@ def convertToInputs(data, labels, pad):
     Xs, Ys = [], []
     for row in range(rows):
         x, y, z, label = labels[row]
-        x -= 1
-        y -= 1
-        z -= 1
+        x, y, z = x - 1, y - 1, z - 1
         xCells = data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :]
         if xCells.shape == (sz, sz, sz, data.shape[3]):
             Xs.append(xCells)
             Ys.append(label)
+            if flipX:
+                Xs.append(xCells[::-1, :, :])
+                Ys.append(label)
+            if flipY:
+                Xs.append(xCells[:, ::-1, :])
+                Ys.append(label)
+            if flipX and flipY:
+                Xs.append(xCells[::-1, ::, :])
+                Ys.append(label)
+
         else:
             # print("Skipping boundary point %s" % str(labels[row]))
             pass
