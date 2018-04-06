@@ -336,6 +336,7 @@ def singleBrainWritePrediction(scanID):
     networkPath = "data/%s/CNN_%s.ckpt" % (scanID, scanID)
     PAD = (SIZE-1)//2
     data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
+    origData = np.copy(data)
     labels = np.vstack((labelsTrain, labelsTest))
     data, labels = files.convertToInputs(data, labels, PAD, FLIP_X, FLIP_Y)
 
@@ -373,27 +374,27 @@ def singleBrainWritePrediction(scanID):
 
         end_time = datetime.datetime.now()
         print('Time elapse: ', str(end_time - start_time))
-        savePath = saver.save(sess, path)
+        savePath = saver.save(sess, networkPath)
         print('Model saved to: %s ' % savePath)
 
         print ("\n=======\nPart #2: Loading and generating all predictions")
-        startX, endX = PAD, data.shape[0] - PAD
-        startY, endY = PAD, data.shape[0] - PAD
+        startX, endX = PAD, origData.shape[0] - PAD
+        startY, endY = PAD, origData.shape[0] - PAD
 
         #rewrite variable names
         xInput, yInput, predictedProbs = xInput, yInput, scores
         allPreds = []
         for x in tqdm(range(startX, endX)):
             for y in tqdm(range(startY, endY)):
-                dataAsInput = files.convertVolumeStack(data, PAD, x, y)
-                #preds = sess.run(predictedProbs, feed_dict={xInput: dataAsInput})
-                preds = np.zeros((len(dataAsInput), 2))
+                dataAsInput = files.convertVolumeStack(origData, PAD, x, y)
+                preds = sess.run(predictedProbs, feed_dict={xInput: dataAsInput})
+                #preds = np.zeros((len(dataAsInput), 2))
                 preds = preds[:, 1]
                 allPreds.extend(preds.tolist())
         allPreds = np.array(allPreds)
-        print ("Predicted shape: " + str(allPreds.shape))
+        print ("\n# predictions: " + str(allPreds.shape))
 
-        dShape = data.shape
+        dShape = origData.shape
         result = np.zeros((dShape[0], dShape[1], dShape[2]))
         result = files.fillPredictions(result, allPreds, pad=PAD)
         resultPath = "data/%s/Normal%s-MRA-CNN.mat" % (scanID, scanID)
@@ -427,8 +428,8 @@ if __name__ == '__main__':
     N_EPOCHS = 20 if RUN_AWS else 2
     BATCH_SIZE = 10 * (2 if FLIP_X else 1) * (2 if FLIP_Y else 1)
 
-    # singleBrain('002')
-    singleBrainWritePrediction('002')
+    # singleBrain('019')
+    singleBrainWritePrediction('019')
 
     # if LOAD_NET:
         # loadAndWritePrediction("network/cnn_2018-04-02.ckpt")
