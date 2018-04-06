@@ -409,17 +409,29 @@ def brainToBrain(fromIDs, toID):
     for fromID in fromIDs:
         print ("  ... loading %s" % (fromID))
         fromData, fromLabelA, fromLabelB = files.loadAllInputsUpdated(fromID, ALL_FEAT)
-        fromLabels = np.concatenate((fromLabelA, fromLabelB))
+        print ("SHAPES:")
+        print (fromLabelA.shape)
+        print (fromLabelB.shape)
+        fromLabels = np.vstack((fromLabelA, fromLabelB))
+        print (fromLabels.shape)
         fromX, fromY = files.convertToInputs(fromData, fromLabels, PAD, FLIP_X, FLIP_Y)
         if trainX is None:
             trainX, trainY = fromX, fromY
         else:
-            trainX = np.concatenate((trainX, fromX))
-            trainY = np.concatenate((trainY, fromY))
+            trainX = np.vstack((trainX, fromX))
+            trainY = np.vstack((trainY, fromY))
+
+    print ("Train X / Y shapes = ")
+    print (trainX.shape)
+    print (trainY.shape)
 
     toData, toLabelA, toLabelB = files.loadAllInputsUpdated(toID, ALL_FEAT)
     toLabels = np.concatenate((toLabelA, toLabelB))
     toX, toY = files.convertToInputs(toData, toLabels, PAD, FLIP_X, FLIP_Y)
+
+    print ("Test X / Y shapes = ")
+    print (toX.shape)
+    print (toY.shape)
     runOne(trainX, trainY, toX, toY, 0)
 
 if __name__ == '__main__':
@@ -429,7 +441,8 @@ if __name__ == '__main__':
     BATCH_SIZE = 10 * (2 if FLIP_X else 1) * (2 if FLIP_Y else 1)
 
     # singleBrain('019')
-    singleBrainWritePrediction('019')
+    # singleBrainWritePrediction('019')
+    brainToBrain(['019'], '002')
 
     # if LOAD_NET:
         # loadAndWritePrediction("network/cnn_2018-04-02.ckpt")
