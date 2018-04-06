@@ -41,7 +41,7 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.001 # 0.03
+LEARNING_RATE = 0.0003 # 0.03
 DROPOUT_RATE = 0.75
 
 HACK_GUESSES = []
@@ -67,9 +67,9 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
 
     with tf.name_scope("layer_a"):
         # conv => 7*7*7
-        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu)
         # conv => 7*7*7
-        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu)
         # pool => 3*3*3
         pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[2,2,2], strides=2)
 
@@ -427,12 +427,12 @@ def brainToBrain(fromIDs, toID):
 
     toData, toLabelA, toLabelB = files.loadAllInputsUpdated(toID, ALL_FEAT)
     toLabels = np.concatenate((toLabelA, toLabelB))
-    toX, toY = files.convertToInputs(toData, toLabels, PAD, FLIP_X, FLIP_Y)
+    toX, toY = files.convertToInputs(toData, toLabels, PAD, False, False)
 
     print ("Test X / Y shapes = ")
     print (toX.shape)
     print (toY.shape)
-    runOne(trainX, trainY, toX, toY, 0)
+    return runOne(trainX, trainY, toX, toY, 0)
 
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
@@ -442,7 +442,8 @@ if __name__ == '__main__':
 
     # singleBrain('019')
     # singleBrainWritePrediction('019')
-    brainToBrain(['019'], '002')
+    _, _, scores = brainToBrain(['019'], '002')
+    print ("Scores = %s" % (scores))
 
     # if LOAD_NET:
         # loadAndWritePrediction("network/cnn_2018-04-02.ckpt")
