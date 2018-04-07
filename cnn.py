@@ -44,7 +44,7 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #RUN_LOCAL = False
 
 LEARNING_RATE = 0.0003 # 0.03
-DROPOUT_RATE = 0.75
+DROPOUT_RATE = 0.65
 
 HACK_GUESSES = []
 HACK_COSTS = []
@@ -65,7 +65,8 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
 
     #nFilt = [64, 128, 128]
     nFilt = [64, 32, 32]
-    #nFilt = [16, 32, 32]
+    #nFilt = [32, 16, 16]
+    #nFilt = [32, 32, 32]
 
     with tf.name_scope("layer_a"):
         # conv => 7*7*7
@@ -73,7 +74,7 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
         # conv => 7*7*7
         conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu)
         # pool => 3*3*3
-        pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[2,2,2], strides=2)
+        pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[3,3,3], strides=2)
 
     """
     with tf.name_scope("layer_c"):
@@ -421,7 +422,7 @@ def brainToBrain(fromIDs, toID):
             trainX, trainY = fromX, fromY
         else:
             trainX = np.vstack((trainX, fromX))
-            trainY = np.vstack((trainY, fromY))
+            trainY = np.append( trainY, fromY )
 
     print ("Train X / Y shapes = ")
     print (trainX.shape)
