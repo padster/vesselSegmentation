@@ -385,7 +385,7 @@ def singleBrainWritePrediction(scanID):
         startY, endY = PAD, origData.shape[0] - PAD
 
         #rewrite variable names
-        xInput, yInput, predictedProbs = xInput, yInput, scores
+        predictedProbs = scores
         allPreds = []
         for x in tqdm(range(startX, endX)):
             for y in tqdm(range(startY, endY)):
@@ -412,9 +412,6 @@ def brainToBrain(fromIDs, toID):
     for fromID in fromIDs:
         print ("  ... loading %s" % (fromID))
         fromData, fromLabelA, fromLabelB = files.loadAllInputsUpdated(fromID, ALL_FEAT)
-        print ("SHAPES:")
-        print (fromLabelA.shape)
-        print (fromLabelB.shape)
         fromLabels = np.vstack((fromLabelA, fromLabelB))
         print (fromLabels.shape)
         fromX, fromY = files.convertToInputs(fromData, fromLabels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
@@ -427,15 +424,99 @@ def brainToBrain(fromIDs, toID):
     print ("Train X / Y shapes = ")
     print (trainX.shape)
     print (trainY.shape)
-
     toData, toLabelA, toLabelB = files.loadAllInputsUpdated(toID, ALL_FEAT)
     toLabels = np.concatenate((toLabelA, toLabelB))
     toX, toY = files.convertToInputs(toData, toLabels, PAD, False, False, False)
-
     print ("Test X / Y shapes = ")
     print (toX.shape)
     print (toY.shape)
     return runOne(trainX, trainY, toX, toY, 0)
+
+def brainsToBrainWritePrediction(fromIDs, toID):
+    PAD = (SIZE-1)//2
+    data, labels = None, None
+    print ("Loading points from %d inputs..." % (len(fromIDs)))
+    for fromID in fromIDs:
+        print ("  ... loading %s" % (fromID))
+        fromData, fromLabelA, fromLabelB = files.loadAllInputsUpdated(fromID, ALL_FEAT)
+        fromLabels = np.vstack((fromLabelA, fromLabelB))
+        print (fromLabels.shape)
+        fromX, fromY = files.convertToInputs(fromData, fromLabels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
+        if data is None:
+            data, labels = fromX, fromY
+        else:
+            data   = np.vstack((data, fromX))
+            labels = np.append(labels, fromY)
+
+    print ("Loading full volume for %s" % (toID))
+    toData, _, _ = files.loadAllInputsUpdated(toID, ALL_FEAT)
+
+    networkPath = "data/%s/Batch_CNN_%s.ckpt" % (toID, toID)
+
+    # origData = np.copy(data)
+    # labels = np.vstack((labelsTrain, labelsTest))
+    # data, labels = files.convertToInputs(data, labels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
+
+    print ("Part #1: Training then saving to %s" % (networkPath))
+    epochs = N_EPOCHS
+    batchSize = BATCH_SIZE
+    xInput, yInput, optimizer, cost, numCorrect, scores = buildNetwork()
+
+    saver = tf.train.Saver()
+
+    with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
+        sess.run(tf.global_variables_initializer())
+        start_time = datetime.datetime.now()
+
+        iterations = int(len(labels)/batchSize) + 1
+        # run epochs
+        for epoch in range(epochs):
+            data, labels = randomShuffle(data, labels)
+            start_time_epoch = datetime.datetime.now()
+            print('Brains-Brain epoch %d started' % (epoch))
+
+            # mini batch for trianing set:
+            totalCost, totalCorr = 0.0, 0
+            for itr in range(iterations):
+                mini_batch_x = data[itr*batchSize: (itr+1)*batchSize]
+                mini_batch_y = labels[itr*batchSize: (itr+1)*batchSize]
+                batchYOneshot = (np.column_stack((mini_batch_y, mini_batch_y)) == [0, 1]) * 1
+                _optimizer, _cost, _corr = sess.run([optimizer, cost, numCorrect], feed_dict={xInput: mini_batch_x, yInput: batchYOneshot})
+                totalCost += _cost
+                totalCorr += _corr
+
+            print (">> Epoch %d had TRAIN loss: %f\t#Correct = %5d/%5d = %f" % (
+                epoch, totalCost, totalCorr, len(labels), totalCorr / len(labels)
+            ))
+
+        end_time = datetime.datetime.now()
+        print('Time elapse: ', str(end_time - start_time))
+        savePath = saver.save(sess, networkPath)
+        print('Model saved to: %s ' % savePath)
+
+        print ("\n=======\nPart #2: Loading and generating all predictions")
+        startX, endX = PAD, toData.shape[0] - PAD
+        startY, endY = PAD, toData.shape[0] - PAD
+
+        #rewrite variable names
+        predictedProbs = scores
+        allPreds = []
+        for x in tqdm(range(startX, endX)):
+            for y in tqdm(range(startY, endY)):
+                dataAsInput = files.convertVolumeStack(toData, PAD, x, y)
+                preds = sess.run(predictedProbs, feed_dict={xInput: dataAsInput})
+                #preds = np.zeros((len(dataAsInput), 2))
+                preds = preds[:, 1]
+                allPreds.extend(preds.tolist())
+        allPreds = np.array(allPreds)
+        print ("\n# predictions: " + str(allPreds.shape))
+
+        dShape = toData.shape
+        result = np.zeros((dShape[0], dShape[1], dShape[2]))
+        result = files.fillPredictions(result, allPreds, pad=PAD)
+        resultPath = "data/%s/Batch_Normal%s-MRA-CNN.mat" % (toID, toID)
+        print ("Writing to %s" % (resultPath))
+        files.writePrediction(resultPath, "cnn", result)
 
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
@@ -445,8 +526,9 @@ if __name__ == '__main__':
 
     # singleBrain('002')
     # singleBrainWritePrediction('002')
-    _, _, scores = brainToBrain(['002', '019', '022'], '023')
-    print ("Scores = %s" % (scores))
+    # _, _, scores = brainToBrain(['002', '019', '022'], '023')
+    # print ("Scores = %s" % (scores))
+    brainsToBrainWritePrediction(['002', '019', '022'], '023')
 
     # if LOAD_NET:
         # loadAndWritePrediction("network/cnn_2018-04-02.ckpt")
