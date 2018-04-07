@@ -284,7 +284,7 @@ def trainAndSaveNet(data, labels, path):
 # TODO: document
 def generateAndWriteNet(save):
     data, labels = files.loadAllInputs(ALL_FEAT)
-    Xs, Ys = files.convertToInputs(data, labels, (SIZE-1)//2, FLIP_X, FLIP_Y)
+    Xs, Ys = files.convertToInputs(data, labels, (SIZE-1)//2, FLIP_X, FLIP_Y, FLIP_Z)
     print ("%d samples" % len(Xs))
     # runKFold(Xs, Ys)
     if save:
@@ -323,8 +323,8 @@ def loadAndWritePrediction(savePath):
 def singleBrain(scanID):
     PAD = (SIZE-1)//2
     data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
-    trainX, trainY = files.convertToInputs(data, labelsTrain, PAD, FLIP_X, FLIP_Y)
-    testX,   testY = files.convertToInputs(data,  labelsTest, PAD, False, False)
+    trainX, trainY = files.convertToInputs(data, labelsTrain, PAD, FLIP_X, FLIP_Y, FLIP_Z)
+    testX,   testY = files.convertToInputs(data,  labelsTest, PAD, False, False, False)
     print ("%d train samples, %d test" % (len(trainX), len(testX)))
     costs, corrs, scores = runOne(trainX, trainY, testX, testY, 0)
     print ("Scores: %s" % (str(scores)))
@@ -337,7 +337,7 @@ def singleBrainWritePrediction(scanID):
     PAD = (SIZE-1)//2
     data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
     labels = np.vstack((labelsTrain, labelsTest))
-    data, labels = files.convertToInputs(data, labels, PAD, FLIP_X, FLIP_Y)
+    data, labels = files.convertToInputs(data, labels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
 
     print ("Part #1: Training then saving to %s" % (networkPath))
     epochs = N_EPOCHS
@@ -412,7 +412,7 @@ def brainToBrain(fromIDs, toID):
         print (fromLabelB.shape)
         fromLabels = np.vstack((fromLabelA, fromLabelB))
         print (fromLabels.shape)
-        fromX, fromY = files.convertToInputs(fromData, fromLabels, PAD, FLIP_X, FLIP_Y)
+        fromX, fromY = files.convertToInputs(fromData, fromLabels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
         if trainX is None:
             trainX, trainY = fromX, fromY
         else:
@@ -425,7 +425,7 @@ def brainToBrain(fromIDs, toID):
 
     toData, toLabelA, toLabelB = files.loadAllInputsUpdated(toID, ALL_FEAT)
     toLabels = np.concatenate((toLabelA, toLabelB))
-    toX, toY = files.convertToInputs(toData, toLabels, PAD, FLIP_X, FLIP_Y)
+    toX, toY = files.convertToInputs(toData, toLabels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
 
     print ("Test X / Y shapes = ")
     print (toX.shape)
@@ -440,7 +440,7 @@ if __name__ == '__main__':
 
     # singleBrain('002')
     # singleBrainWritePrediction('002')
-    brainToBrain(['019'], '002')
+    brainToBrain(['002', '019', '022'], '023')
 
     # if LOAD_NET:
         # loadAndWritePrediction("network/cnn_2018-04-02.ckpt")
