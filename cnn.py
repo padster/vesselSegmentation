@@ -17,13 +17,15 @@ SAVE_NET = "--save" in sys.argv
 LOAD_NET = "--load" in sys.argv
 FLIP_X = "--flipx" in sys.argv
 FLIP_Y = "--flipy" in sys.argv
-print ("====\nTarget: %s\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\n====\n" % (
+FLIP_Z = "--flipz" in sys.argv
+print ("====\nTarget: %s\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n====\n" % (
     "AWS" if RUN_AWS else "Local",
     "All" if ALL_FEAT else "Intensity",
     "Loading from file\n" if LOAD_NET else "",
     "Saving to file\n" if SAVE_NET else "",
     str(FLIP_X),
     str(FLIP_Y),
+    str(FLIP_Z),
 ))
 
 
@@ -41,7 +43,7 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.001 # 0.03
+LEARNING_RATE = 0.0003 # 0.03
 DROPOUT_RATE = 0.75
 
 HACK_GUESSES = []
@@ -67,9 +69,9 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
 
     with tf.name_scope("layer_a"):
         # conv => 7*7*7
-        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu)
         # conv => 7*7*7
-        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
+        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu)
         # pool => 3*3*3
         pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[2,2,2], strides=2)
 
@@ -336,6 +338,7 @@ def singleBrainWritePrediction(scanID):
     networkPath = "data/%s/CNN_%s.ckpt" % (scanID, scanID)
     PAD = (SIZE-1)//2
     data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
+    origData = np.copy(data)
     labels = np.vstack((labelsTrain, labelsTest))
     data, labels = files.convertToInputs(data, labels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
 
@@ -373,26 +376,27 @@ def singleBrainWritePrediction(scanID):
 
         end_time = datetime.datetime.now()
         print('Time elapse: ', str(end_time - start_time))
-        savePath = saver.save(sess, path)
+        savePath = saver.save(sess, networkPath)
         print('Model saved to: %s ' % savePath)
 
         print ("\n=======\nPart #2: Loading and generating all predictions")
-        startX, endX = PAD, data.shape[0] - PAD
-        startY, endY = PAD, data.shape[0] - PAD
+        startX, endX = PAD, origData.shape[0] - PAD
+        startY, endY = PAD, origData.shape[0] - PAD
 
         #rewrite variable names
         xInput, yInput, predictedProbs = xInput, yInput, scores
         allPreds = []
         for x in tqdm(range(startX, endX)):
             for y in tqdm(range(startY, endY)):
-                dataAsInput = files.convertVolumeStack(data, PAD, x, y)
+                dataAsInput = files.convertVolumeStack(origData, PAD, x, y)
                 preds = sess.run(predictedProbs, feed_dict={xInput: dataAsInput})
+                #preds = np.zeros((len(dataAsInput), 2))
                 preds = preds[:, 1]
                 allPreds.extend(preds.tolist())
         allPreds = np.array(allPreds)
-        print ("Predicted shape: " + str(allPreds.shape))
+        print ("\n# predictions: " + str(allPreds.shape))
 
-        dShape = data.shape
+        dShape = origData.shape
         result = np.zeros((dShape[0], dShape[1], dShape[2]))
         result = files.fillPredictions(result, allPreds, pad=PAD)
         resultPath = "data/%s/Normal%s-MRA-CNN.mat" % (scanID, scanID)
@@ -425,22 +429,23 @@ def brainToBrain(fromIDs, toID):
 
     toData, toLabelA, toLabelB = files.loadAllInputsUpdated(toID, ALL_FEAT)
     toLabels = np.concatenate((toLabelA, toLabelB))
-    toX, toY = files.convertToInputs(toData, toLabels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
+    toX, toY = files.convertToInputs(toData, toLabels, PAD, False, False, False)
 
     print ("Test X / Y shapes = ")
     print (toX.shape)
     print (toY.shape)
-    runOne(trainX, trainY, toX, toY, 0)
+    return runOne(trainX, trainY, toX, toY, 0)
 
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
     SIZE = 7
-    N_EPOCHS = 25 if RUN_AWS else 2
+    N_EPOCHS = 20 if RUN_AWS else 2
     BATCH_SIZE = 10 * (2 if FLIP_X else 1) * (2 if FLIP_Y else 1)
 
     # singleBrain('002')
     # singleBrainWritePrediction('002')
-    brainToBrain(['002', '019', '022'], '023')
+    _, _, scores = brainToBrain(['002', '019', '022'], '023')
+    print ("Scores = %s" % (scores))
 
     # if LOAD_NET:
         # loadAndWritePrediction("network/cnn_2018-04-02.ckpt")
