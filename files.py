@@ -87,20 +87,15 @@ def loadAllInputsUpdated(scanID, allFeatures):
     lTestPath  = 'data/%s/Normal%s-MRA_annotationVess_testing_C.mat'  % (scanID, scanID)
     return data, loadLabels(lTrainPath), loadLabels(lTestPath)
 
-
-# Given full volume, split up into cubes the same size as the inputs
-# HACK - doesn't fit into memory
-"""
-def convertEntireVolume(data):
-    nX, nY, nZ, nChan = data.shape
-
-    Xs = []
-    for x in range(pad, nX - pad):
-        for y in range(pad, nY - pad):
-            for z in range(pad, nZ - pad):
-                Xs.append(data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :])
-    return np.array(Xs)
-"""
+def convertScanToXY(scanID, allFeatures, pad, flipX, flipY, flipZ, merge):
+    data, labelsTrain, labelsTest = loadAllInputsUpdated(scanID, allFeatures)
+    if merge:
+        labels = np.vstack((labelsTrain, labelsTest))
+        return convertToInputs(data, labels, pad, flipX, flipY, flipZ)
+    else:
+        trainX, trainY = convertToInputs(data, labelsTrain, pad, flipX, flipY, flipZ)
+        testX, testY = convertToInputs(data, labelsTest, pad, flipX, flipY, flipZ)
+        return trainX, trainY, testX, testY
 
 # Given full volume, split up into a subset of the cubes the same size as the inputs
 def convertVolumeStack(data, pad, x, y):
@@ -112,7 +107,6 @@ def convertVolumeStack(data, pad, x, y):
     for z in range(pad, nZ - pad):
         Xs.append(data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :])
     return np.array(Xs)
-
 
 def fillPredictions(result, predictions, pad):
     nX, nY, nZ = result.shape
