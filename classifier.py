@@ -2,7 +2,7 @@ import numpy as np
 import files
 import util
 
-SIZE = 9
+SIZE = 7
 PAD = (SIZE-1)//2
 
 import sys
@@ -13,7 +13,8 @@ LOAD_NET = "--load" in sys.argv
 FLIP_X = "--flipx" in sys.argv
 FLIP_Y = "--flipy" in sys.argv
 FLIP_Z = "--flipz" in sys.argv
-print ("====\nTarget: %s\nVolume: %dx%dx%d\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n====\n" % (
+PREDICT_TRANSFORM = "--trans" in sys.argv
+print ("====\nTarget: %s\nVolume: %dx%dx%d\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n%s====\n" % (
     "AWS" if RUN_AWS else "Local",
     SIZE, SIZE, SIZE,
     "All" if ALL_FEAT else "Intensity",
@@ -22,6 +23,7 @@ print ("====\nTarget: %s\nVolume: %dx%dx%d\nFeatures: %s\n%s%sFlip X: %s\nFlip Y
     str(FLIP_X),
     str(FLIP_Y),
     str(FLIP_Z),
+    "Predict with transform\n" if PREDICT_TRANSFORM else "",
 ))
 
 

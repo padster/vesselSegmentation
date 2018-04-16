@@ -15,6 +15,20 @@ def flatCube(data):
     s = data.shape
     return data.reshape((s[0], s[1] * s[2] * s[3]))
 
+# R x (xyz) => 8R x (xyz)
+def allRotations(data):
+    allData = []
+    for i in range(data.shape[0]):
+        for xR in [1, -1]:
+            for yR in [1, -1]:
+                for zR in [1, -1]:
+                    allData.append(data[i, ::xR, ::yR, ::zR])
+    return np.array(allData)
+
+def combinePredictions(predictions):
+    # TODO - better ways?
+    return np.mean(predictions, axis=1)
+
 def oneshotY(y):
   return np.column_stack((1 - y, y))
 

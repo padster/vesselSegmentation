@@ -15,6 +15,17 @@ RANDOM_SEED = 194981
 
 HACK_GUESSES = []
 
+def predict(forest, data):
+    if classifier.PREDICT_TRANSFORM:
+        data = util.allRotations(data)
+        testD  = xgb.DMatrix(flatCube(data))
+        pred = forest.predict(testD)
+        pred = pred.reshape((-1, 8))
+        return util.combinePredictions(pred)
+    else:
+        testD  = xgb.DMatrix(flatCube(data))
+        return forest.predict(testD)
+
 # Convert 4d: (R x X x Y x Z x C) into 2d: (R x XYZC)
 def flatCube(data):
     s = data.shape
@@ -39,14 +50,14 @@ def runOne(trainX, trainY, testX, testY, scanID):
         'objective': 'binary:logistic',  # error evaluation for multiclass training
     }
     nRounds = 25  # the number of training iterations
+
     # Train using only the training set:
-    trees = xgb.train(param, trainD, nRounds)
+    forest = xgb.train(param, trainD, nRounds)
 
     # Use the trained forest to predict the remaining positions:
-    testD  = xgb.DMatrix(flatCube(testX))
-    testProbs = trees.predict(testD)
+    testProbs = predict(forest, testX)
     return [], [], util.genScores(testY, testProbs)
 
 if __name__ == '__main__':
-    # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
-    classifier.brainsToBrain(['002', '022', '023'], '019', runOne, calcScore=True, writeVolume=False)
+    classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
+    # classifier.brainsToBrain(['002', '022', '023'], '019', runOne, calcScore=True, writeVolume=False)
