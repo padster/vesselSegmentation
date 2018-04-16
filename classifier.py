@@ -2,6 +2,8 @@ import numpy as np
 import files
 import util
 
+SIZE = 9
+PAD = (SIZE-1)//2
 
 import sys
 RUN_AWS = "--local" not in sys.argv
@@ -11,8 +13,9 @@ LOAD_NET = "--load" in sys.argv
 FLIP_X = "--flipx" in sys.argv
 FLIP_Y = "--flipy" in sys.argv
 FLIP_Z = "--flipz" in sys.argv
-print ("====\nTarget: %s\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n====\n" % (
+print ("====\nTarget: %s\nVolume: %dx%dx%d\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n====\n" % (
     "AWS" if RUN_AWS else "Local",
+    SIZE, SIZE, SIZE,
     "All" if ALL_FEAT else "Intensity",
     "Loading from file\n" if LOAD_NET else "",
     "Saving to file\n" if SAVE_NET else "",
@@ -21,8 +24,7 @@ print ("====\nTarget: %s\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n
     str(FLIP_Z),
 ))
 
-SIZE = 7
-PAD = (SIZE-1)//2
+
 
 def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False):
   data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)

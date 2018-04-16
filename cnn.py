@@ -40,7 +40,7 @@ N_FILT = [64, 32, 32]
 #N_FILT = [32, 16, 16]
 #N_FILT = [32, 32, 32]
 
-ERROR_WEIGHT = -4 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
+ERROR_WEIGHT = -3 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
 ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 
 # SET IN MAIN:
@@ -52,7 +52,7 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 LEARNING_RATE = 0.0003 # 0.03
 DROPOUT_RATE = 0.65
 
-def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
+def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     nChannels = N_CHANNELS if classifier.ALL_FEAT else 1
     nFilt = N_FILT
     xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, nChannels])
@@ -95,6 +95,44 @@ def buildNetwork(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAND
     return xInput, yInput, optimizer, cost, numCorrect, predictedProbs
 
 
+def buildNetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
+    nChannels = N_CHANNELS if classifier.ALL_FEAT else 1
+    nFilt = [64, 64, 64, 32, 32]
+    xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, nChannels])
+    yInput = tf.placeholder(tf.float32, shape=[None, 2])
+
+    with tf.name_scope("layer_a"):
+        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 9x9x9
+        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 9x9x9
+        pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[2,2,2], strides=2, padding='same') # 5x5x5
+
+    with tf.name_scope("layer_b"):
+        conv4 = tf.layers.conv3d(inputs=pool3, filters=nFilt[2], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu) #5x5x5
+        conv5 = tf.layers.conv3d(inputs=conv4, filters=nFilt[3], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu) #5x5x5
+        pool6 = tf.layers.max_pooling3d(inputs=conv5, pool_size=[2,2,2], strides=2, padding='same') #3x3x3
+
+    with tf.name_scope("batch_norm"):
+        cnn3d_bn = tf.layers.batch_normalization(inputs=pool6, training=True)
+    with tf.name_scope("fully_con"):
+        flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*nFilt[3]])
+        dense = tf.layers.dense(inputs=flattening, units=nFilt[4], activation=tf.nn.relu)
+        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=True)
+    with tf.name_scope("y_conv"):
+        prediction = tf.layers.dense(inputs=dropout, units=2)
+        predictedProbs = tf.nn.softmax(prediction)
+    with tf.name_scope("cross_entropy"):
+        cost = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
+            targets=yInput, logits=prediction, pos_weight=ERROR_WEIGHT_FRAC
+        ))
+    with tf.name_scope("training"):
+        optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
+        # optimizer = tf.train.AdagradOptimizer(learningRate).minimize(cost)
+
+    correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
+    numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
+    return xInput, yInput, optimizer, cost, numCorrect, predictedProbs    
+
+
 # As an example, run CNN on these given labels and test data, return the score.
 def runOne(trainX, trainY, testX, testY, scanID):
     epochs = N_EPOCHS
@@ -104,7 +142,8 @@ def runOne(trainX, trainY, testX, testY, scanID):
     runVolume = testY is None
     testProbs = None
 
-    xInput, yInput, optimizer, cost, numCorrect, scores = buildNetwork()
+    buildFunc = buildNetwork9 if classifier.SIZE == 9 else buildNetwork7
+    xInput, yInput, optimizer, cost, numCorrect, scores = buildFunc()
 
     costs, corrs = [], []
     with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
@@ -244,8 +283,8 @@ def trainAndSaveNet(data, labels, path):
 
 if __name__ == '__main__':
     global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
-    N_EPOCHS = 50 if classifier.RUN_AWS else 2
+    N_EPOCHS = 30 if classifier.RUN_AWS else 2
     BATCH_SIZE = 10 * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
 
-    # classifier.singleBrain('002', runOne, calcScore=False, writeVolume=True)
-    classifier.brainsToBrain(['002', '022', '023'], '019', runOne, calcScore=True, writeVolume=True)
+    # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
+    classifier.brainsToBrain(['002', '019', '023'], '022', runOne, calcScore=True, writeVolume=True)
