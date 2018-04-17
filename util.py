@@ -28,6 +28,9 @@ def allRotations(data):
 def combinePredictions(predictions):
     # TODO - better ways?
     return np.mean(predictions, axis=1)
+    # pi = np.prod(predictions, axis=1)
+    # mpi = np.prod(1 - predictions, axis=1)
+    # return pi / (pi + mpi)
 
 def oneshotY(y):
   return np.column_stack((1 - y, y))

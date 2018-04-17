@@ -130,7 +130,18 @@ def buildNetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAN
 
     correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
-    return xInput, yInput, optimizer, cost, numCorrect, predictedProbs    
+    return xInput, yInput, optimizer, cost, numCorrect, predictedProbs
+
+
+def predict(sess, scores, xInput, data):
+    if classifier.PREDICT_TRANSFORM:
+        data = util.allRotations(data)
+        preds = sess.run(scores, feed_dict={xInput: data})
+        preds = preds[:, 1].reshape((-1, 8))
+        return util.combinePredictions(preds)
+    else:
+        preds = sess.run(scores, feed_dict={xInput: data})
+        return preds[:, 1].tolist()
 
 
 # As an example, run CNN on these given labels and test data, return the score.
@@ -163,13 +174,13 @@ def runOne(trainX, trainY, testX, testY, scanID):
                 batchX = trainX[itr*batchSize: (itr+1)*batchSize]
                 batchY = trainY[itr*batchSize: (itr+1)*batchSize]
                 _optimizer, _cost, _corr = sess.run([optimizer, cost, numCorrect], feed_dict={
-                    xInput: batchX, 
+                    xInput: batchX,
                     yInput: util.oneshotY(batchY)
                 })
                 totalCost += _cost
                 totalCorr += _corr
 
-            print (">> Epoch %d had TRAIN loss: %f\t#Correct = %5d/%5d = %f" % (
+            print (">> Epoch %d had TRAIN loss: %.2f\t#Correct = %5d/%5d = %f" % (
                 epoch, totalCost, totalCorr, len(trainY), totalCorr / len(trainY)
             ))
 
@@ -177,20 +188,16 @@ def runOne(trainX, trainY, testX, testY, scanID):
             if runTest:
                 # print ("\n=======\nPart #2: Running against test voxels.")
                 testX, testY = util.randomShuffle(testX, testY)
-                totalCost, totalCorr = 0.0, 0
+                totalCorr = 0
                 itrs = int(len(testY)/batchSize) + 1
                 for itr in range(itrs):
                     batchX = testX[itr*batchSize: (itr+1)*batchSize]
                     batchY = testY[itr*batchSize: (itr+1)*batchSize]
-                    _cost, _corr = sess.run([cost, numCorrect], feed_dict={
-                        xInput: batchX, 
-                        yInput: util.oneshotY(batchY)
-                    })
-                    totalCost += _cost
-                    totalCorr += _corr
+                    predictions = predict(sess, scores, xInput, batchX)
+                    totalCorr += np.sum((np.array(predictions) > 0.5) == (np.array(batchY) > 0.5))
                 end_time_epoch = datetime.datetime.now()
-                print('>> Epoch %d had  TEST loss: %f\t#Correct = %5d/%5d = %f\tTime elapsed: %s' % (
-                    epoch, totalCost, totalCorr, len(testY), totalCorr / len(testY), str(end_time_epoch - start_time_epoch)
+                print('>> Epoch %d had  TEST loss:      \t#Correct = %5d/%5d = %f\tTime elapsed: %s' % (
+                    epoch, totalCorr, len(testY), totalCorr / len(testY), str(end_time_epoch - start_time_epoch)
                 ))
                 costs.append(totalCost)
                 corrs.append(totalCorr/len(testY))
@@ -203,13 +210,13 @@ def runOne(trainX, trainY, testX, testY, scanID):
             startY, endY = pad, testX.shape[0] - pad
 
             #rewrite variable names
-            predictedProbs = scores
             allPreds = []
             for x in tqdm(range(startX, endX), ascii=True):
                 for y in tqdm(range(startY, endY), ascii=True):
                     dataAsInput = files.convertVolumeStack(testX, pad, x, y)
-                    preds = sess.run(scores, feed_dict={xInput: dataAsInput})
-                    allPreds.extend(preds[:, 1].tolist())
+                    preds = predict(sess, scores, xInput, dataAsInput)
+                    # preds = sess.run(scores, feed_dict={xInput: dataAsInput})
+                    allPreds.extend(preds)
             allPreds = np.array(allPreds)
             print ("\n# predictions: " + str(allPreds.shape))
 
@@ -230,7 +237,7 @@ def runOne(trainX, trainY, testX, testY, scanID):
                 batchX = testX[itr*batchSize: (itr+1)*batchSize]
                 batchY = testY[itr*batchSize: (itr+1)*batchSize]
                 _scores = sess.run(scores, feed_dict={
-                    xInput: batchX, 
+                    xInput: batchX,
                     yInput: util.oneshotY(batchY)
                 })
                 testProbs.extend(np.array(_scores)[:, 1].tolist())
@@ -286,5 +293,5 @@ if __name__ == '__main__':
     N_EPOCHS = 30 if classifier.RUN_AWS else 2
     BATCH_SIZE = 10 * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
 
-    # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
-    classifier.brainsToBrain(['002', '019', '023'], '022', runOne, calcScore=True, writeVolume=True)
+    classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
+    # classifier.brainsToBrain(['002', '019', '023'], '022', runOne, calcScore=True, writeVolume=True)

@@ -59,5 +59,5 @@ def runOne(trainX, trainY, testX, testY, scanID):
     return [], [], util.genScores(testY, testProbs)
 
 if __name__ == '__main__':
-    classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
-    # classifier.brainsToBrain(['002', '022', '023'], '019', runOne, calcScore=True, writeVolume=False)
+    # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
+    classifier.brainsToBrain(['002', '022', '023'], '019', runOne, calcScore=True, writeVolume=False)
