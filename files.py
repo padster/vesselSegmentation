@@ -102,8 +102,6 @@ def convertVolumeStack(data, pad, x, y):
     nX, nY, nZ, nChan = data.shape
 
     Xs = []
-    # for x in range(x, nX - pad):
-        # for y in range(pad, nY - pad):
     for z in range(pad, nZ - pad):
         Xs.append(data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :])
     return np.array(Xs)

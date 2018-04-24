@@ -10,37 +10,18 @@ import files
 import util
 import viz
 
-# TODO - argparse?
-# import sys
-# RUN_AWS = "--local" not in sys.argv
-# ALL_FEAT = "--features" in sys.argv
-# SAVE_NET = "--save" in sys.argv
-# LOAD_NET = "--load" in sys.argv
-# FLIP_X = "--flipx" in sys.argv
-# FLIP_Y = "--flipy" in sys.argv
-# FLIP_Z = "--flipz" in sys.argv
-# print ("====\nTarget: %s\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n====\n" % (
-#     "AWS" if RUN_AWS else "Local",
-#     "All" if ALL_FEAT else "Intensity",
-#     "Loading from file\n" if LOAD_NET else "",
-#     "Saving to file\n" if SAVE_NET else "",
-#     str(FLIP_X),
-#     str(FLIP_Y),
-#     str(FLIP_Z),
-# ))
-
 
 N_FOLDS = 2 # Train on 1/2, Test on 1/2
 N_REPEATS = 5 if classifier.RUN_AWS else 1 # K-fold this many times
 RANDOM_SEED = 194981
 N_CHANNELS = 4 # Intensity, EM, JV, PC
 
-#N_FILT = [64, 128, 128]
-N_FILT = [64, 32, 32]
-#N_FILT = [32, 16, 16]
+# N_FILT = [64, 128, 128]
+N_FILT = [64, 64, 64]
+# N_FILT = [32, 16, 16]
 #N_FILT = [32, 32, 32]
 
-ERROR_WEIGHT = -3 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
+ERROR_WEIGHT = -4 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
 ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 
 # SET IN MAIN:
@@ -49,8 +30,12 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.0003 # 0.03
-DROPOUT_RATE = 0.65
+LEARNING_RATE = 0.001 # 0.03
+DROPOUT_RATE = 0.65 #.5
+BASE_BATCH = 5
+N_EPOCHS = 15 if classifier.RUN_AWS else 2
+
+BATCH_SIZE = BASE_BATCH * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
 
 def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     nChannels = N_CHANNELS if classifier.ALL_FEAT else 1
@@ -62,17 +47,6 @@ def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAN
         conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 7x7x7
         conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 7x7x7
         pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[3,3,3], strides=2) # 3x3x3
-
-    """
-    with tf.name_scope("layer_c"):
-        # conv => 3*3*3
-        conv4 = tf.layers.conv3d(inputs=pool3, filters=64, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
-        # conv => 3*3*3
-        conv5 = tf.layers.conv3d(inputs=conv4, filters=128, kernel_size=[3,3,3], padding='same', activation=tf.nn.relu)
-        # pool => 1*1*1
-        pool6 = tf.layers.max_pooling3d(inputs=conv5, pool_size=[2,2,2], strides=2)
-    """
-
     with tf.name_scope("batch_norm"):
         cnn3d_bn = tf.layers.batch_normalization(inputs=pool3, training=True)
     with tf.name_scope("fully_con"):
@@ -222,7 +196,7 @@ def runOne(trainX, trainY, testX, testY, scanID):
 
             volumeResult = np.zeros(testX.shape[0:3])
             volumeResult = files.fillPredictions(volumeResult, allPreds, pad)
-            resultPath = "data/%s/Normal%s-MRA-CNN.mat" % (scanID, scanID)
+            resultPath = "data/%s/Normal%s-MRA-CNN-trans.mat" % (scanID, scanID)
             print ("Writing to %s" % (resultPath))
             files.writePrediction(resultPath, "cnn", volumeResult)
 
@@ -289,9 +263,5 @@ def trainAndSaveNet(data, labels, path):
 """
 
 if __name__ == '__main__':
-    global SIZE, N_EPOCHS, BATCH_SIZE, RUN_LOCAL
-    N_EPOCHS = 30 if classifier.RUN_AWS else 2
-    BATCH_SIZE = 10 * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
-
-    classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
-    # classifier.brainsToBrain(['002', '019', '023'], '022', runOne, calcScore=True, writeVolume=True)
+    # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
+    classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=True)
