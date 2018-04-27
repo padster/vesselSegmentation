@@ -14,14 +14,13 @@ import viz
 N_FOLDS = 2 # Train on 1/2, Test on 1/2
 N_REPEATS = 5 if classifier.RUN_AWS else 1 # K-fold this many times
 RANDOM_SEED = 194981
-N_CHANNELS = 4 # Intensity, EM, JV, PC
 
 # N_FILT = [64, 128, 128]
 N_FILT = [64, 64, 64]
 # N_FILT = [32, 16, 16]
 #N_FILT = [32, 32, 32]
 
-ERROR_WEIGHT = -4 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
+ERROR_WEIGHT = -2 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
 ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 
 # SET IN MAIN:
@@ -38,21 +37,21 @@ N_EPOCHS = 15 if classifier.RUN_AWS else 2
 BATCH_SIZE = BASE_BATCH * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
 
 def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
-    nChannels = N_CHANNELS if classifier.ALL_FEAT else 1
     nFilt = N_FILT
-    xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, nChannels])
+    xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, classifier.N_FEAT])
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
+    isTraining = tf.placeholder(tf.bool)
 
     with tf.name_scope("layer_a"):
         conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 7x7x7
         conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 7x7x7
         pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[3,3,3], strides=2) # 3x3x3
     with tf.name_scope("batch_norm"):
-        cnn3d_bn = tf.layers.batch_normalization(inputs=pool3, training=True)
+        cnn3d_bn = tf.layers.batch_normalization(inputs=pool3, training=isTraining)
     with tf.name_scope("fully_con"):
         flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*nFilt[1]])
         dense = tf.layers.dense(inputs=flattening, units=nFilt[2], activation=tf.nn.relu)
-        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=True)
+        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=isTraining)
     with tf.name_scope("y_conv"):
         prediction = tf.layers.dense(inputs=dropout, units=2)
         predictedProbs = tf.nn.softmax(prediction)
@@ -61,19 +60,23 @@ def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAN
             targets=yInput, logits=prediction, pos_weight=ERROR_WEIGHT_FRAC
         ))
     with tf.name_scope("training"):
-        optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
+        optimizer = tf.train.AdamOptimizer(learningRate)
+        updateOps = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(updateOps):
+            trainOp = optimizer.minimize(cost)
+        # optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
         # optimizer = tf.train.AdagradOptimizer(learningRate).minimize(cost)
 
     correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
-    return xInput, yInput, optimizer, cost, numCorrect, predictedProbs
+    return xInput, yInput, isTraining, trainOp, cost, numCorrect, predictedProbs
 
 
 def buildNetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
-    nChannels = N_CHANNELS if classifier.ALL_FEAT else 1
     nFilt = [64, 64, 64, 32, 32]
-    xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, nChannels])
+    xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, classifier.N_FEAT])
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
+    isTraining = tf.placeholder(tf.bool)
 
     with tf.name_scope("layer_a"):
         conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 9x9x9
@@ -86,11 +89,11 @@ def buildNetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAN
         pool6 = tf.layers.max_pooling3d(inputs=conv5, pool_size=[2,2,2], strides=2, padding='same') #3x3x3
 
     with tf.name_scope("batch_norm"):
-        cnn3d_bn = tf.layers.batch_normalization(inputs=pool6, training=True)
+        cnn3d_bn = tf.layers.batch_normalization(inputs=pool6, training=isTraining)
     with tf.name_scope("fully_con"):
         flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*nFilt[3]])
         dense = tf.layers.dense(inputs=flattening, units=nFilt[4], activation=tf.nn.relu)
-        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=True)
+        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=isTraining)
     with tf.name_scope("y_conv"):
         prediction = tf.layers.dense(inputs=dropout, units=2)
         predictedProbs = tf.nn.softmax(prediction)
@@ -99,27 +102,30 @@ def buildNetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAN
             targets=yInput, logits=prediction, pos_weight=ERROR_WEIGHT_FRAC
         ))
     with tf.name_scope("training"):
-        optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
+        optimizer = tf.train.AdamOptimizer(learningRate)
+        updateOps = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(updateOps):
+            trainOp = optimizer.minimize(cost)
         # optimizer = tf.train.AdagradOptimizer(learningRate).minimize(cost)
 
     correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
-    return xInput, yInput, optimizer, cost, numCorrect, predictedProbs
+    return xInput, yInput, isTraining, trainOp, cost, numCorrect, predictedProbs
 
 
-def predict(sess, scores, xInput, data):
+def predict(sess, scores, xInput, isTraining, data):
     if classifier.PREDICT_TRANSFORM:
         data = util.allRotations(data)
-        preds = sess.run(scores, feed_dict={xInput: data})
+        preds = sess.run(scores, feed_dict={xInput: data, isTraining: False})
         preds = preds[:, 1].reshape((-1, 8))
         return util.combinePredictions(preds)
     else:
-        preds = sess.run(scores, feed_dict={xInput: data})
+        preds = sess.run(scores, feed_dict={xInput: data, isTraining: False})
         return preds[:, 1].tolist()
 
 
 # As an example, run CNN on these given labels and test data, return the score.
-def runOne(trainX, trainY, testX, testY, scanID):
+def runOne(trainX, trainY, testX, testY, scanID, savePath):
     epochs = N_EPOCHS
     batchSize = BATCH_SIZE
 
@@ -127,13 +133,17 @@ def runOne(trainX, trainY, testX, testY, scanID):
     runVolume = testY is None
     testProbs = None
 
+    tf.reset_default_graph()
     buildFunc = buildNetwork9 if classifier.SIZE == 9 else buildNetwork7
-    xInput, yInput, optimizer, cost, numCorrect, scores = buildFunc()
+    xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = buildFunc()
+
+    initOp = tf.global_variables_initializer()
+    saver = None if savePath is None else tf.train.Saver()
 
     costs, corrs = [], []
     with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
-        sess.run(tf.global_variables_initializer())
         start_time = datetime.datetime.now()
+        sess.run(tf.global_variables_initializer())
 
         iterations = int(len(trainY)/batchSize) + 1
         # run epochs
@@ -147,9 +157,10 @@ def runOne(trainX, trainY, testX, testY, scanID):
             for itr in range(iterations):
                 batchX = trainX[itr*batchSize: (itr+1)*batchSize]
                 batchY = trainY[itr*batchSize: (itr+1)*batchSize]
-                _optimizer, _cost, _corr = sess.run([optimizer, cost, numCorrect], feed_dict={
+                _trainOp, _cost, _corr = sess.run([trainOp, cost, numCorrect], feed_dict={
                     xInput: batchX,
-                    yInput: util.oneshotY(batchY)
+                    yInput: util.oneshotY(batchY),
+                    isTraining: True
                 })
                 totalCost += _cost
                 totalCorr += _corr
@@ -167,7 +178,7 @@ def runOne(trainX, trainY, testX, testY, scanID):
                 for itr in range(itrs):
                     batchX = testX[itr*batchSize: (itr+1)*batchSize]
                     batchY = testY[itr*batchSize: (itr+1)*batchSize]
-                    predictions = predict(sess, scores, xInput, batchX)
+                    predictions = predict(sess, scores, xInput, isTraining, batchX)
                     totalCorr += np.sum((np.array(predictions) > 0.5) == (np.array(batchY) > 0.5))
                 end_time_epoch = datetime.datetime.now()
                 print('>> Epoch %d had  TEST loss:      \t#Correct = %5d/%5d = %f\tTime elapsed: %s' % (
@@ -188,8 +199,7 @@ def runOne(trainX, trainY, testX, testY, scanID):
             for x in tqdm(range(startX, endX), ascii=True):
                 for y in tqdm(range(startY, endY), ascii=True):
                     dataAsInput = files.convertVolumeStack(testX, pad, x, y)
-                    preds = predict(sess, scores, xInput, dataAsInput)
-                    # preds = sess.run(scores, feed_dict={xInput: dataAsInput})
+                    preds = predict(sess, scores, xInput, isTraining, dataAsInput)
                     allPreds.extend(preds)
             allPreds = np.array(allPreds)
             print ("\n# predictions: " + str(allPreds.shape))
@@ -212,9 +222,15 @@ def runOne(trainX, trainY, testX, testY, scanID):
                 batchY = testY[itr*batchSize: (itr+1)*batchSize]
                 _scores = sess.run(scores, feed_dict={
                     xInput: batchX,
-                    yInput: util.oneshotY(batchY)
+                    yInput: util.oneshotY(batchY), 
+                    isTraining: False
                 })
                 testProbs.extend(np.array(_scores)[:, 1].tolist())
+
+        # Save the network:
+        if savePath is not None:
+            savePath = saver.save(sess, savePath)
+            print ("Model saved to %s" % (savePath))
 
     if testProbs is not None:
         return costs, corrs, util.genScores(testY, testProbs)
@@ -223,45 +239,55 @@ def runOne(trainX, trainY, testX, testY, scanID):
 
 
 # TODO: Migrate to classifier
-"""
-def trainAndSaveNet(data, labels, path):
-    epochs = N_EPOCHS
-    batchSize = BATCH_SIZE
-    xInput, yInput, optimizer, cost, numCorrect, scores = buildNetwork()
+def volumeFromSavedNet(path, scanID):
+    tf.reset_default_graph()
 
+    print ("Using network %s to generate volume %s" % (path, scanID))
+    volume, _, _ = files.loadAllInputsUpdated(scanID, classifier.ALL_FEAT)
+
+    buildFunc = buildNetwork9 if classifier.SIZE == 9 else buildNetwork7
+    xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = buildFunc()
     saver = tf.train.Saver()
 
-    with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
-        sess.run(tf.global_variables_initializer())
+    with tf.Session() as sess:
+        print ("Loading net from file...")
         start_time = datetime.datetime.now()
+        saver.restore(sess, path)
 
-        iterations = int(len(labels)/batchSize) + 1
-        # run epochs
-        for epoch in range(epochs):
-            data, labels = util.randomShuffle(data, labels)
-            start_time_epoch = datetime.datetime.now()
-            print('Saving epoch %d started' % (epoch))
+        # Generate entire volume:
+        print ("\nGenerating all predictions for volume %s" % (scanID))
+        pad = classifier.PAD
+        startX, endX = pad, volume.shape[0] - pad
+        startY, endY = pad, volume.shape[0] - pad
 
-            # mini batch for trianing set:
-            totalCost, totalCorr = 0.0, 0
-            for itr in range(iterations):
-                mini_batch_x = data[itr*batchSize: (itr+1)*batchSize]
-                mini_batch_y = labels[itr*batchSize: (itr+1)*batchSize]
-                batchYOneshot = (np.column_stack((mini_batch_y, mini_batch_y)) == [0, 1]) * 1
-                _optimizer, _cost, _corr = sess.run([optimizer, cost, numCorrect], feed_dict={xInput: mini_batch_x, yInput: batchYOneshot})
-                totalCost += _cost
-                totalCorr += _corr
+        #rewrite variable names
+        allPreds = []
+        for x in tqdm(range(startX, endX), ascii=True):
+            for y in tqdm(range(startY, endY), ascii=True):
+                dataAsInput = files.convertVolumeStack(volume, pad, x, y)
+                preds = predict(sess, scores, xInput, isTraining, dataAsInput)
+                allPreds.extend(preds)
+        allPreds = np.array(allPreds)
+        print ("\n# predictions: " + str(allPreds.shape))
 
-            print (">> Epoch %d had TRAIN loss: %f\t#Correct = %5d/%5d = %f" % (
-                epoch, totalCost, totalCorr, len(labels), totalCorr / len(labels)
-            ))
+        volumeResult = np.zeros(volume.shape[0:3])
+        volumeResult = files.fillPredictions(volumeResult, allPreds, pad)
+        resultPath = "data/multiV/04_25/Normal%s-MRA-CNN.mat" % (scanID)
+        print ("Writing to %s" % (resultPath))
+        files.writePrediction(resultPath, "cnn", volumeResult)
 
-        end_time = datetime.datetime.now()
-        print('Time elapse: ', str(end_time - start_time))
-        savePath = saver.save(sess, path)
-        print('Model saved to: %s ' % savePath)
-"""
+    end_time = datetime.datetime.now()
+    print('Time elapse: ', str(end_time - start_time))
+
+
 
 if __name__ == '__main__':
     # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
-    classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=True)
+    # savePath = "data/multiV/04_25/023-saved-CNN.ckpt"
+    savePath = None
+    classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=False, savePath=savePath)
+
+    # volumeFromSavedNet(savePath, '002')
+    # volumeFromSavedNet(savePath, '019')
+    # volumeFromSavedNet(savePath, '022')
+    # volumeFromSavedNet(savePath, '023')

@@ -34,7 +34,7 @@ def flatCube(data):
         newS = newS * s[4]
     return data.reshape((s[0], newS))
 
-def runOne(trainX, trainY, testX, testY, scanID):
+def runOne(trainX, trainY, testX, testY, scanID, savePath):
     runTest = testY is not None
     runVolume = testY is None
     assert not runVolume # TODO: implement volume writing
@@ -60,4 +60,4 @@ def runOne(trainX, trainY, testX, testY, scanID):
 
 if __name__ == '__main__':
     # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
-    classifier.brainsToBrain(['002', '022', '023'], '019', runOne, calcScore=True, writeVolume=False)
+    classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=False, savePath=None)

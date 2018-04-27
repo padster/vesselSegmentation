@@ -1,6 +1,10 @@
 import numpy as np
 import scipy.io
 
+# HACK: Set by caller
+CNN_FEAT = False
+CNN_FEAT_PATH = "data/multiV/04_25/"
+
 def loadMat(path, name):
     return scipy.io.loadmat(path).get(name)
 
@@ -71,16 +75,24 @@ def loadAllInputs(allFeatures):
 
 def loadAllInputsUpdated(scanID, allFeatures):
     fsPath = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
+    
     print ("Loading data for scan %s" % (scanID))
     data, featEM, featJV, featPC = loadFeat(fsPath)
     assert data.shape == featEM.shape
     assert data.shape == featJV.shape
     assert data.shape == featPC.shape
 
+    allStacks = [data]
     if allFeatures:
-        data = np.stack([data, featEM, featJV, featPC], axis=-1)
-    else:
-        data = np.stack([data], axis=-1)
+        allStacks.extend([featEM, featJV, featPC])
+
+    if CNN_FEAT:
+        path = CNN_FEAT_PATH + ("Normal%s-MRA-CNN.mat" % (scanID))
+        featCNN = loadCNN(path)
+        assert data.shape == featCNN.shape
+        allStacks.append(featCNN)
+
+    data = np.stack(allStacks, axis=-1)
     print ("Input data loaded, shape = %s" % (str(data.shape)))
 
     lTrainPath = 'data/%s/Normal%s-MRA_annotationVess_training_C.mat' % (scanID, scanID)

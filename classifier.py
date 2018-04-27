@@ -14,6 +14,16 @@ FLIP_X = "--flipx" in sys.argv
 FLIP_Y = "--flipy" in sys.argv
 FLIP_Z = "--flipz" in sys.argv
 PREDICT_TRANSFORM = "--trans" in sys.argv
+CNN_FEAT = "--cnnfeat" in sys.argv
+files.CNN_FEAT = CNN_FEAT # HACK
+
+N_FEAT = 1
+if ALL_FEAT:
+    N_FEAT += 3
+if CNN_FEAT:
+    N_FEAT += 1
+
+
 print ("====\nTarget: %s\nVolume: %dx%dx%d\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n%s====\n" % (
     "AWS" if RUN_AWS else "Local",
     SIZE, SIZE, SIZE,
@@ -27,23 +37,22 @@ print ("====\nTarget: %s\nVolume: %dx%dx%d\nFeatures: %s\n%s%sFlip X: %s\nFlip Y
 ))
 
 
-
-def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False):
+def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):
   data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT)
 
   if calcScore:
     trainX, trainY = files.convertToInputs(data, labelsTrain, PAD, FLIP_X, FLIP_Y, FLIP_Z)
     testX,   testY = files.convertToInputs(data,  labelsTest, PAD, False, False, False)
     print ("%d train samples, %d test" % (len(trainX), len(testX)))
-    _, _, scores = runOneFunc(trainX, trainY, testX, testY, scanID)
+    _, _, scores = runOneFunc(trainX, trainY, testX, testY, scanID, savePath)
     print ("  Results\n  -------\n" + util.formatScores(scores))
 
   if writeVolume:
     labels = np.vstack((labelsTrain, labelsTest))
     trainX, trainY = files.convertToInputs(data, labels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
-    runOneFunc(trainX, trainY, data, None, scanID)
+    runOneFunc(trainX, trainY, data, None, scanID, save)
 
-def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False):
+def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):
     trainX, trainY = None, None
     print ("Loading points from scans: %s" % (str(fromIDs)))
     for fromID in fromIDs:
@@ -59,12 +68,12 @@ def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False):
     if calcScore:
         toX, toY = files.convertScanToXY(toID, ALL_FEAT, PAD, False, False, False, merge=True)
         print ("Test X / Y shapes = ", toX.shape, toY.shape)
-        _, _, scores = runOneFunc(trainX, trainY, toX, toY, toID)
+        _, _, scores = runOneFunc(trainX, trainY, toX, toY, toID, savePath)
         print ("  Results\n  -------\n" + util.formatScores(scores))
 
     if writeVolume:
         data, _, _ = files.loadAllInputsUpdated(toID, ALL_FEAT)
-        runOneFunc(trainX, trainY, data, None, toID)
+        runOneFunc(trainX, trainY, data, None, toID, save)
 
 """ TODO: bring back?
 def runKFold(Xs, Ys):
