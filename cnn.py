@@ -106,7 +106,45 @@ def buildNetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAN
         updateOps = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(updateOps):
             trainOp = optimizer.minimize(cost)
-        # optimizer = tf.train.AdagradOptimizer(learningRate).minimize(cost)
+
+    correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
+    numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
+    return xInput, yInput, isTraining, trainOp, cost, numCorrect, predictedProbs
+
+def buildNetwork11(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
+    nFilt = [64, 64, 64, 32, 32]
+    xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, classifier.N_FEAT])
+    yInput = tf.placeholder(tf.float32, shape=[None, 2])
+    isTraining = tf.placeholder(tf.bool)
+
+    with tf.name_scope("layer_a"):
+        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 11x11x11
+        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 11x11x11
+        pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[2,2,2], strides=2, padding='same') # 6x6x6
+
+    with tf.name_scope("layer_b"):
+        conv4 = tf.layers.conv3d(inputs=pool3, filters=nFilt[2], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 6x6x6
+        conv5 = tf.layers.conv3d(inputs=conv4, filters=nFilt[3], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 6x6x6
+        pool6 = tf.layers.max_pooling3d(inputs=conv5, pool_size=[2,2,2], strides=2, padding='same') # 3x3x3
+
+    with tf.name_scope("batch_norm"):
+        cnn3d_bn = tf.layers.batch_normalization(inputs=pool6, training=isTraining)
+    with tf.name_scope("fully_con"):
+        flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*nFilt[3]])
+        dense = tf.layers.dense(inputs=flattening, units=nFilt[4], activation=tf.nn.relu)
+        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=isTraining)
+    with tf.name_scope("y_conv"):
+        prediction = tf.layers.dense(inputs=dropout, units=2)
+        predictedProbs = tf.nn.softmax(prediction)
+    with tf.name_scope("cross_entropy"):
+        cost = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
+            targets=yInput, logits=prediction, pos_weight=ERROR_WEIGHT_FRAC
+        ))
+    with tf.name_scope("training"):
+        optimizer = tf.train.AdamOptimizer(learningRate)
+        updateOps = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(updateOps):
+            trainOp = optimizer.minimize(cost)
 
     correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
@@ -134,7 +172,16 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
     testProbs = None
 
     tf.reset_default_graph()
-    buildFunc = buildNetwork9 if classifier.SIZE == 9 else buildNetwork7
+    buildFunc = None
+    if classifier.SIZE == 7:
+        buildFunc = buildNetwork7
+    elif classifier.SIZE == 9:
+        buildFunc = buildNetwork9
+    elif classifier.SIZE == 11:
+        buildFunc = buildNetwork11
+    else:
+        print ("No network for size %d" % (classifier.SIZE))
+        raise 0
     xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = buildFunc()
 
     initOp = tf.global_variables_initializer()

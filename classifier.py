@@ -2,7 +2,7 @@ import numpy as np
 import files
 import util
 
-SIZE = 7
+SIZE = 9
 PAD = (SIZE-1)//2
 
 import sys
