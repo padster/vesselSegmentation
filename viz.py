@@ -1,15 +1,18 @@
 import matplotlib.pyplot as plt
 
-def clean_subplots(r, c, pad=0.05, show=True):
-    f = plt.figure()
+def clean_subplots(r, c, pad=0.05, axes=False, show=False, figsize=None, dpi=None):
+    if figsize is not None and dpi is not None:
+        figsize = tuple([f / dpi for f in figsize])
+    f = plt.figure(figsize=figsize, dpi=dpi)
     ax = []
     at = 1
     for i in range(r):
         row = []
         for j in range(c):
             axHere = f.add_subplot(r, c, at)
-            # axHere.get_xaxis().set_visible(False)
-            # axHere.get_yaxis().set_visible(False)
+            if not axes:
+                axHere.get_xaxis().set_visible(False)
+                axHere.get_yaxis().set_visible(False)
             row.append(axHere)
             at = at + 1
         ax.append(row)

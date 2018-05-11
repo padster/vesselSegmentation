@@ -1,5 +1,6 @@
 *.pyc
 *.pem
+*.png
 
 data/**/*-FS.mat
 data/**/*-RF.mat
