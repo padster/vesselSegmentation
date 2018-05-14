@@ -35,57 +35,49 @@ def process2D(rawImg, sxy, compat):
   return cleanImg
 
 
-def postProcess(rawData):
-  cleanData = np.copy(rawData)
+def process3D(rawVolume, sxy, compat):
+  shape = rawVolume.shape
 
-  # HACK
-  Z = 30
-  rawImg = rawData[:, :, Z]
-  softmax = np.stack([1 - rawImg, rawImg])
-  print (softmax.shape)
-
+  softmax = np.stack([1 - rawVolume, rawVolume])
   unary = unary_from_softmax(softmax)
-  print (unary.shape)
-
   unary = np.ascontiguousarray(unary)
-  print (unary.shape)
 
-  d = dcrf.DenseCRF2D(rawImg.shape[0], rawImg.shape[1], 2)  # width, height, nlabels
+  nLabels = 2
+  d = dcrf.DenseCRF(np.prod(shape), nLabels)
   d.setUnaryEnergy(unary)
 
-  # This potential penalizes small pieces of segmentation that are
-  # spatially isolated -- enforces more spatially consistent segmentations
-  # feats = create_pairwise_gaussian(sdims=(20, 20), shape=rawImg.shape[:2])
-  # d.addPairwiseEnergy(feats, compat=3,
-                      # kernel=dcrf.DIAG_KERNEL,
-                      # normalization=dcrf.NORMALIZE_SYMMETRIC)
-  d.addPairwiseGaussian(sxy=30, compat=1)
+  feats = create_pairwise_gaussian(sdims=(sxy, sxy, sxy), shape=shape)
+  d.addPairwiseEnergy(feats, compat=compat) # kernel=dcrf.FULL_KERNEL)
 
-  Q = d.inference(n_iterations=300)
-  cleanImg = np.argmax(Q, axis=0).reshape((rawImg.shape[0], rawImg.shape[1]))
-
-  
-  cleanData[:, :, Z] = cleanImg
-  return cleanData
+  nIter = 5
+  Q = d.inference(nIter)
+  cleanVolume = np.argmax(Q, axis=0).reshape(rawVolume.shape)
+  return cleanVolume
 
 def main():
   Z = 40
+
   mra, _, _, _ = files.loadFeat(FS_FILE)
+  files.tiffWrite("mra.tif", mra)
   rawData = files.loadCNN(CNN_FILE)
+  files.tiffWrite("input.tif", rawData)
+
+  """
+  SC = 0.4
 
   DPI = 300
-  ax = viz.clean_subplots(1, 2, figsize=(1200, 900), dpi=DPI)
+  ax = viz.clean_subplots(1, 2, figsize=(1200 * SC, 900 * SC), dpi=DPI)
   ax[0][0].imshow(mra[:, :, Z])
   ax[0][1].imshow(rawData[:, :, Z])
-  plt.savefig('input.png', dpi=DPI)
+  # plt.savefig('input.png', dpi=DPI)
 
   # cleanData = postProcess(rawData)
 
-  sxys = [1, 10, 100] # 10, 30, 100]
-  compats = [1, 3, 5]#, 4, 8, 16]
+  sxys = [1, 3, 6] # 10, 30, 100]
+  compats = [10, 13, 16]#, 4, 8, 16]
 
   plt.tight_layout()
-  ax2 = viz.clean_subplots(len(sxys), len(compats), figsize=(3600, 3600), dpi=DPI)
+  ax2 = viz.clean_subplots(len(sxys), len(compats), figsize=(3600 * SC, 3600 * SC), dpi=DPI)
   for i, sxy in enumerate(sxys):
     for j, compat in enumerate(compats):
       if i == len(sxys) - 1:
@@ -101,8 +93,15 @@ def main():
 
   # ax1.imshow(rawData[:, :, Z])
   # ax2.imshow(cleanData[:, :, Z])
-  plt.savefig('result.png', dpi=DPI)
-  # plt.show()
+  # plt.savefig('result.png', dpi=DPI)
+  plt.show()
+  """
+
+  print ("Processing...")
+  cleanData = process3D(rawData, sxy=3, compat=13)
+  print ("Done! Final shape is ", cleanData.shape)
+  files.tiffWrite("output.tif", cleanData)
+
 
 
 if __name__ == '__main__':

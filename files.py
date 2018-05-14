@@ -1,5 +1,13 @@
+# import libtiff
 import numpy as np
 import scipy.io
+
+from tifffile import TiffFile, imsave
+
+###
+### MAT files
+###
+
 
 # HACK: Set by caller
 CNN_FEAT = False
@@ -131,3 +139,34 @@ def writePrediction(path, key, prediction):
     data[key] = prediction
     scipy.io.savemat(path, data)
     print ("Saved to " + path)
+
+###
+### TIF files
+###
+
+# Write prediction as tif file:
+def asMatrix(asList, nRows):
+    nCols = int(len(asList) / nRows)
+    assert nRows * nCols == len(asList), "List wrong size for matrix conversion"
+    return [asList[i:i+nCols] for i in range(0, len(asList), nCols)]
+
+def tiffRead(path):
+    # First use tifffile to get channel data (not supported by libtiff?)
+    shape = None
+    with TiffFile(path) as tif:
+        shape = tif.asarray().shape
+        print("Tiff shape: ", shape)
+    nChannels = shape[0] if len(shape) == 4 else 1
+
+    stack = []
+    tif = libtiff.TIFF.open(path, mode='r')
+    stack = asMatrix([np.array(img) for img in tif.iter_images()], nChannels)
+    tif.close()
+    return stack
+
+def tiffWrite(path, volume):
+    volume = (volume * 65535).astype(np.uint16)
+    # tif = libtiff.TIFFFimage(volume, description='')
+    # tif.write_file(path, compression='lzw')
+    # del tif
+    imsave(path, volume)
