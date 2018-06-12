@@ -1,4 +1,5 @@
 import datetime
+import math
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.model_selection import RepeatedStratifiedKFold
@@ -15,10 +16,6 @@ N_FOLDS = 2 # Train on 1/2, Test on 1/2
 N_REPEATS = 5 if classifier.RUN_AWS else 1 # K-fold this many times
 RANDOM_SEED = 194981
 
-# N_FILT = [64, 128, 128]
-N_FILT = [64, 64, 64]
-# N_FILT = [32, 16, 16]
-#N_FILT = [32, 32, 32]
 
 ERROR_WEIGHT = -2 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
 ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
@@ -32,12 +29,15 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 LEARNING_RATE = 0.001 # 0.03
 DROPOUT_RATE = 0.65 #.5
 BASE_BATCH = 5
-N_EPOCHS = 15 if classifier.RUN_AWS else 2
+N_EPOCHS = 7 if classifier.RUN_AWS else 2
 
 BATCH_SIZE = BASE_BATCH * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
 
 def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
-    nFilt = N_FILT
+    # nFilt = [64, 128, 128]
+    nFilt = [64, 64, 64]
+    # nFilt = [32, 16, 16]
+    # nFilt = [32, 32, 32]
     xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, classifier.N_FEAT])
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
     isTraining = tf.placeholder(tf.bool)
@@ -221,7 +221,7 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
                 # print ("\n=======\nPart #2: Running against test voxels.")
                 testX, testY = util.randomShuffle(testX, testY)
                 totalCorr = 0
-                itrs = int(len(testY)/batchSize) + 1
+                itrs = int(math.ceil(len(testY)/batchSize))
                 for itr in range(itrs):
                     batchX = testX[itr*batchSize: (itr+1)*batchSize]
                     batchY = testY[itr*batchSize: (itr+1)*batchSize]
@@ -253,7 +253,8 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
 
             volumeResult = np.zeros(testX.shape[0:3])
             volumeResult = files.fillPredictions(volumeResult, allPreds, pad)
-            resultPath = "data/%s/Normal%s-MRA-CNN-trans.mat" % (scanID, scanID)
+            # resultPath = "data/%s/Normal%s-MRA-CNN-trans.mat" % (scanID, scanID)
+            resultPath = "data/tmp/%s-weighted.mat" % scanID
             print ("Writing to %s" % (resultPath))
             files.writePrediction(resultPath, "cnn", volumeResult)
 
@@ -263,7 +264,7 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
         # Run against test:
         if runTest:
             testProbs = []
-            itrs = int(len(testY)/batchSize) + 1
+            itrs = int(math.ceil(len(testY)/batchSize))
             for itr in range(itrs):
                 batchX = testX[itr*batchSize: (itr+1)*batchSize]
                 batchY = testY[itr*batchSize: (itr+1)*batchSize]
@@ -329,10 +330,9 @@ def volumeFromSavedNet(path, scanID):
 
 
 if __name__ == '__main__':
-    # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False)
-    # savePath = "data/multiV/04_25/023-saved-CNN.ckpt"
     savePath = None
-    classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=False, savePath=savePath)
+    classifier.singleBrain('002', runOne, calcScore=True, writeVolume=True, savePath=savePath)
+    # classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=False, savePath=savePath)
 
     # volumeFromSavedNet(savePath, '002')
     # volumeFromSavedNet(savePath, '019')

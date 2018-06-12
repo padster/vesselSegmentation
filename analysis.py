@@ -7,6 +7,7 @@ from sklearn.manifold import TSNE
 from tqdm import tqdm
 
 import files
+import viz
 
 def intersectOverUnion(dataA, dataB):
     return np.sum(np.logical_and(dataA, dataB)) * 1.0 / np.sum(np.logical_or(dataA, dataB))
@@ -142,7 +143,7 @@ def simpleTSNE():
 
     print (Xs.shape)
 
-    ax = clean_subplots(len(PERPLEXITY_OPTIONS), len(LEARN_RATE_OPTIONS))
+    f, ax = viz.clean_subplots(len(PERPLEXITY_OPTIONS), len(LEARN_RATE_OPTIONS))
     for i in tqdm(range(len(PERPLEXITY_OPTIONS))):
         perplexity = PERPLEXITY_OPTIONS[i]
         ax[i][0].get_yaxis().set_visible(True)
@@ -155,14 +156,39 @@ def simpleTSNE():
     plt.show()
 
 
+def rawHistograms(ids):
+    n = len(ids)
+    f, ax = viz.clean_subplots(n, 1, axes=True)
+
+    for i in range(n):
+        scanID = ids[i]
+        title = "Scan %s" % scanID
+        # path = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
+        path = 'data/tmp/002-%s.mat' % scanID
+        # data, _, _, _ = files.loadFeat(path)
+        data = files.loadCNN(path)
+
+        data = data.flatten()
+        ax[i][0].hist(data, log=True, range=(0, 1), bins=50)
+        cp = ax[i][0].twinx()
+        cp.set_ylabel(title)
+        cp.set_yticklabels([])
+        if (i == n - 1):
+            ax[i][0].set_xlabel("Intensity")
+    f.suptitle("Voxel count by intensity")
+    plt.show()
+
 
 def main():
     # checkEMJVAgreement()
     # emData, jvData = rfAnalysis()
-    emData = files.loadEM().flatten()
-    jvData = files.loadJV().flatten()
-    cnnAnalysis(emData, jvData)
+    # emData = files.loadEM().flatten()
+    # jvData = files.loadJV().flatten()
+    # cnnAnalysis(emData, jvData)
     # simpleTSNE()
+
+    # rawHistograms(['002', '019', '022', '023'])
+    rawHistograms(['weighted', 'unweighted'])
 
 if __name__ == '__main__':
     main()

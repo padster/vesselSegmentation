@@ -4,10 +4,14 @@ import scipy.io
 
 from tifffile import TiffFile, imsave
 
+import util
+
 ###
 ### MAT files
 ###
 
+
+BASE_PATH = "D:/projects/vessels/inputs"
 
 # HACK: Set by caller
 CNN_FEAT = False
@@ -29,10 +33,19 @@ def loadRF(path='data/Normal001-MRA-RF.mat'):
     return loadMat(path, 'forest')
 def loadCNN(path='data/Normal001-MRA-CNN.mat'):
     return loadMat(path, 'cnn')
-
+def loadCRF(path='data/Normal001-MRA-CRF.mat'):
+    return loadMat(path, 'crf')
+    
 def loadFeat(path):
+    print ("Loading features from " + path)
     mat = scipy.io.loadmat(path)
     return mat.get('volMRA'), mat.get('EM'), mat.get('JV'), mat.get('PC')
+
+def loadBM(scanID):
+    path = "D:/projects/vessels/inputs/%s/Normal%s-MRA-BM.mat" % (scanID, scanID)
+    print ("Loading Brain Mask from %s" % path)
+    mat = scipy.io.loadmat(path)
+    return mat.get('BM')
 
 # Loads the 2d [X Y Z 0/1-label] matrix for vessel annotations
 def loadLabels(path='data/Normal001-MRA-labels.mat'):
@@ -64,6 +77,7 @@ def convertToInputs(data, labels, pad, flipX, flipY, flipZ):
             pass
     return np.array(Xs), np.array(Ys)
 
+"""
 # Load intensities, plus optionally other features as second channels
 def loadAllInputs(allFeatures):
     print ("Loading volume intensitites...")
@@ -80,9 +94,13 @@ def loadAllInputs(allFeatures):
     print ("Input data loaded, shape = %s" % (str(data.shape)))
     labels = loadLabels()
     return data, labels
+"""
 
-def loadAllInputsUpdated(scanID, allFeatures):
-    fsPath = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
+def loadAllInputsUpdated(scanID, allFeatures, moreFeatures, noTrain=False):
+    # fsPath = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
+    fsPath     = "%s/%s/Normal%s-MRA-FS.mat" % (BASE_PATH, scanID, scanID)
+    lTrainPath = "%s/%s/Normal%s-MRA_annotationVess_training_C.mat" % (BASE_PATH, scanID, scanID)
+    lTestPath  = "%s/%s/Normal%s-MRA_annotationVess_training_C.mat" % (BASE_PATH, scanID, scanID)
     
     print ("Loading data for scan %s" % (scanID))
     data, featEM, featJV, featPC = loadFeat(fsPath)
@@ -94,6 +112,9 @@ def loadAllInputsUpdated(scanID, allFeatures):
     if allFeatures:
         allStacks.extend([featEM, featJV, featPC])
 
+    if moreFeatures:
+        allStacks.extend(util.genSimpleFeatures(data))
+
     if CNN_FEAT:
         path = CNN_FEAT_PATH + ("Normal%s-MRA-CNN.mat" % (scanID))
         featCNN = loadCNN(path)
@@ -103,12 +124,13 @@ def loadAllInputsUpdated(scanID, allFeatures):
     data = np.stack(allStacks, axis=-1)
     print ("Input data loaded, shape = %s" % (str(data.shape)))
 
-    lTrainPath = 'data/%s/Normal%s-MRA_annotationVess_training_C.mat' % (scanID, scanID)
-    lTestPath  = 'data/%s/Normal%s-MRA_annotationVess_testing_C.mat'  % (scanID, scanID)
-    return data, loadLabels(lTrainPath), loadLabels(lTestPath)
+    if noTrain:
+        return data
+    else:
+        return data, loadLabels(lTrainPath), loadLabels(lTestPath)
 
-def convertScanToXY(scanID, allFeatures, pad, flipX, flipY, flipZ, merge):
-    data, labelsTrain, labelsTest = loadAllInputsUpdated(scanID, allFeatures)
+def convertScanToXY(scanID, allFeatures, moreFeatures, pad, flipX, flipY, flipZ, merge):
+    data, labelsTrain, labelsTest = loadAllInputsUpdated(scanID, allFeatures, moreFeatures)
     if merge:
         labels = np.vstack((labelsTrain, labelsTest))
         return convertToInputs(data, labels, pad, flipX, flipY, flipZ)
