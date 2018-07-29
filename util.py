@@ -103,3 +103,6 @@ def formatTable(colVals, rowVals, tableVals):
 			result += "%.3f, " % tableVals[i, j]
 		result += "\n"
 	return result
+
+def applyBrainMask(data, mask):
+	return data * mask

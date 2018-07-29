@@ -1,4 +1,6 @@
+import gc
 import numpy as np
+
 import files
 import util
 
@@ -66,13 +68,15 @@ def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, 
         else:
             trainX = np.vstack((trainX, fromX))
             trainY = np.append( trainY, fromY )
+        gc.collect()
     print ("Train X / Y shapes = ", trainX.shape, trainY.shape)
 
     if calcScore:
-        toX, toY = files.convertScanToXY(toID, ALL_FEAT, PAD, False, False, False, merge=True)
+        toX, toY = files.convertScanToXY(toID, ALL_FEAT, MORE_FEAT, PAD, False, False, False, merge=True)
         print ("Test X / Y shapes = ", toX.shape, toY.shape)
         _, _, scores = runOneFunc(trainX, trainY, toX, toY, toID, savePath)
         print ("  Results\n  -------\n" + util.formatScores(scores))
+        print ("\n\n\n")
 
     if writeVolume:
         data, _, _ = files.loadAllInputsUpdated(toID, ALL_FEAT, MORE_FEAT)

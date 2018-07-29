@@ -1,5 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.ndimage as ndi
+import skimage.morphology as morph
+import skfmm
+
 from tqdm import tqdm
 
 import files
@@ -80,7 +84,7 @@ def _pairwiseChanges(a, b):
   c10 = np.sum( (a  > 0.5) & (b <= 0.5) )
   return c01, c10, c01 + c10
 
-def main():
+def doCRF():
   Z = 40
 
   mra, _, _, _ = files.loadFeat(FS_FILE)
@@ -177,6 +181,101 @@ def main():
 
   # files.writePrediction(CRF_FILE, 'crf', cleanData)
 
+
+"""
+SKELETON CODE
+"""
+
+def doSkeleton(scanID):
+  data, lTrain, lTest = files.loadAllInputsUpdated(scanID, False, False)
+  mraData = data[:, :, :, 0]
+  # mraPath = path = "D:/projects/vessels/inputs/%s/Normal%s-MRA-FS.mat" % (scanID, scanID)
+  # mraData, _, _, _ = files.loadFeat(mraPath)
+  cnnPath = path = "D:/projects/vessels/inputs/%s/Normal%s-MRA-CNN.mat" % (scanID, scanID)
+  cnnData = files.loadCNN(cnnPath)
+  mask = files.loadBM(scanID)
+  cnnClean = util.applyBrainMask(cnnData, mask)
+  smoothed = ndi.gaussian_filter(cnnClean, 2)
+  smoothFilt = smoothed > 0.12
+  skeleton = morph.skeletonize_3d(smoothFilt)
+  smoothSkel = ndi.gaussian_filter(skeleton, 0.5)
+  cnnWithSkel = cnnClean * ndi.gaussian_filter(skeleton, 2.5)
+
+  f, ax = viz.clean_subplots(2, 4)
+  Z = 35
+  ax[0][0].imshow(mraData[:, :, Z])
+  ax[0][1].imshow(cnnData[:, :, Z])
+  ax[0][2].imshow(cnnClean[:, :, Z])
+  ax[0][3].imshow(smoothed[:, :, Z])
+  ax[1][0].imshow(smoothFilt[:, :, Z])
+  ax[1][1].imshow(skeleton[:, :, Z])
+  ax[1][2].imshow(smoothSkel[:, :, Z])
+  ax[1][3].imshow(cnnWithSkel[:, :, Z])
+  plt.show(block=False)
+  """
+  print ("Saving...")
+  smoothPathOut = "D:/projects/vessels/inputs/%s/20180617-%s-CNN-smooth2.tif" % (scanID, scanID)
+  smoothFiltPathOut = "D:/projects/vessels/inputs/%s/20180617-%s-CNN-smoothFilt.tif" % (scanID, scanID)
+  skeletonPathOut = "D:/projects/vessels/inputs/%s/20180617-%s-CNN-skeleton.tif" % (scanID, scanID)
+  smoothSkelPathOut = "D:/projects/vessels/inputs/%s/20180617-%s-CNN-skeleton-smooth.tif" % (scanID, scanID)
+  cnnWithSkelPathOut = "D:/projects/vessels/inputs/%s/20180617-%s-CNN-raw-with-skel.tif" % (scanID, scanID)
+  files.tiffWrite(smoothPathOut, smoothed)
+  files.tiffWrite(smoothFiltPathOut, smoothFilt)
+  files.tiffWrite(skeletonPathOut, skeleton)
+  files.tiffWrite(smoothSkelPathOut, smoothSkel)
+  files.tiffWrite(cnnWithSkelPathOut, cnnWithSkel)
+  """
+
+  skeletonAsBoundary = np.ones(skeleton.shape)
+  skeletonAsBoundary[skeleton > 0] = 0
+  print ("Calculating distance...")
+  distanceToSkeleton = skfmm.distance(skeletonAsBoundary)
+  print ("Done!")
+
+  onDist, offDist = [], []
+  onCNN, offCNN = [], []
+  for labels in [lTrain, lTest]:
+    print (labels.shape)
+    for i in range(labels.shape[0]):
+      x, y, z, l = labels[i, :]
+      x, y, z = x - 1, y - 1, z - 1
+      if l == 1:
+        onDist.append(distanceToSkeleton[x, y, z])
+        onCNN.append(cnnData[x, y, z])
+      else:
+        offDist.append(distanceToSkeleton[x, y, z])
+        offCNN.append(cnnData[x, y, z])
+  print ("%d on, %d off" % (len(onDist), len(offDist)))
+  onDist, offDist = np.array(onDist), np.array(offDist)
+  onCNN, offCNN = np.array(onCNN), np.array(offCNN)
+
+  """
+  f, ax = viz.clean_subplots(1, 1, axes=True)
+  ax = ax[0][0]
+  bins = 50
+  ax.hist(offDist, bins, alpha=0.5, color='r', label='non-vessel', log=True, range=(0, 80))
+  ax.hist(onDist, bins, alpha=0.5, color='b', label='vessel', log=True, range=(0, 80))
+  ax.set_xlabel('Distance')
+  f.suptitle('Counts of distance to skeleton, by vessel type')
+  plt.legend()
+  plt.show()
+  """
+
+  f, ax = viz.clean_subplots(1, 1, axes=True, pad=0.1)
+  ax = ax[0][0]
+  ax.scatter(offDist, offCNN, alpha=0.5, c='r', label='non-vessel')
+  ax.scatter(onDist, onCNN, alpha=0.5, c='b', label='vessel')
+  ax.set_xlabel('Distance')
+  ax.set_ylabel('CNN Value')
+  f.suptitle('%s: Skeleton Distance vs. CNN prediction, by vessel type' % scanID)
+  plt.legend()
+  plt.show()
+
+
+
+def main():
+  # doCRF()
+  doSkeleton('022')
 
 
 if __name__ == '__main__':

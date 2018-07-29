@@ -6,14 +6,27 @@ from sklearn.manifold import TSNE
 from sklearn.model_selection import RepeatedStratifiedKFold
 import tensorflow as tf
 from tqdm import tqdm
+import sys
 
 import classifier
 import files
 import util
 import viz
 
+TRAIN_CAE = "--train" in sys.argv
+CLASSIFY = "--classify" in sys.argv
+
+
+INNER_DIMEN = 100
+
+ERROR_WEIGHT = 0 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
+ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
+
+
 RANDOM_SEED = 194981
 LEARNING_RATE = 0.003 # 0.03
+DENSE_LEARNING_RATE = 0.003
+
 DROPOUT_RATE = 0.65 #.5
 BASE_BATCH = 30
 N_EPOCHS = 10 if classifier.RUN_AWS else 2
@@ -63,8 +76,7 @@ def simpleTSNE(Xs, Ys):
 
 def buildCAENetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     print ("Building network...")
-    # INNER_DIMEN = 32 # M
-    INNER_DIMEN = 50  
+
     # nFilt = [64, 64, 32, 32, INNER_DIMEN, 32, 32, 64, 64]
     nFilt = [5, 5, 10, 10, INNER_DIMEN, 10, 10, 5, 5]
     xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, classifier.N_FEAT])
@@ -128,9 +140,176 @@ def buildCAENetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=
     return xInput, xOutput, innerFeat, isTraining, trainOp, cost
 
 
+# Build network for the reduced-dimensionality version
+def buildDenseNetwork(learningRate=DENSE_LEARNING_RATE):
+    MID_DIMEN = INNER_DIMEN // 4
+
+    xInputD = tf.placeholder(tf.float32, shape=[None, INNER_DIMEN])
+    yInputD = tf.placeholder(tf.float32, shape=[None, 2])
+
+    with tf.name_scope("hiddenD"):
+        hiddenD = tf.layers.dense(inputs=xInputD, units=MID_DIMEN, activation=tf.nn.selu)
+
+    with tf.name_scope("y_convD"):
+        predictionD = tf.layers.dense(inputs=hiddenD, units=2)
+        predictedProbsD = tf.nn.softmax(predictionD)
+
+    with tf.name_scope("cross_entropyD"):
+        costD = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
+            targets=yInputD, logits=predictionD, pos_weight=ERROR_WEIGHT_FRAC
+        ))
+
+    with tf.name_scope("denseTrainingD"):
+        optimizerD = tf.train.AdamOptimizer(learningRate)
+        updateOpsD = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(updateOpsD):
+            trainOpD = optimizerD.minimize(costD)
+
+    with tf.name_scope("scoresD"):
+        correctD = tf.equal(tf.argmax(predictionD, 1), tf.argmax(yInputD, 1))
+        numCorrectD = tf.reduce_sum(tf.cast(correctD, tf.int32))
+    return {
+        'x': xInputD, 
+        'y': yInputD, 
+        't': trainOpD, 
+        'c': costD, 
+        'nc': numCorrectD, 
+        'p': predictedProbsD
+    }
+
+
+## 
+def densePredict(sess, xInput, innerFeat, isTraining, xInputD, yInputD, probs, cost, batchX, batchY):
+    #if classifier.PREDICT_TRANSFORM:
+    if False: # HACK - support transforms during prediction
+        data = util.allRotations(data)
+        preds = sess.run(probs, feed_dict={xInput: data, isTraining: False})
+        preds = preds[:, 1].reshape((-1, 8))
+        return util.combinePredictions(preds)
+    else:
+        print (batchY.shape)
+        print (util.oneshotY(batchY).shape)
+        _feat = sess.run(innerFeat, feed_dict={
+            xInput: batchX,
+            isTraining: False
+        })
+        _preds, _cost = sess.run([probs, cost], feed_dict={
+            xInput: batchX, # HMM
+            isTraining: False, # HMM
+            xInputD: _feat,
+            yInputD: util.oneshotY(batchY)
+        })
+        return _preds[:, 1].tolist(), _cost
+
+
+# Given trained CAE, train a new classifier off train data, and check against test
+def runDenseNetwork(trainID, testID, loadPath, batchSize=BATCH_SIZE):
+    epochs = N_EPOCHS * 5
+    tf.reset_default_graph()
+
+    volTrain, lTrainA, lTrainB = files.loadAllInputsUpdated(trainID, classifier.ALL_FEAT, classifier.MORE_FEAT)
+    volTest, lTestA, lTestB = files.loadAllInputsUpdated(testID, classifier.ALL_FEAT, classifier.MORE_FEAT)
+    lTrain = np.concatenate([lTrainA, lTrainB], axis=0)
+    lTest = np.concatenate([lTestA, lTestB], axis=0)
+
+    trainX, trainY = files.convertToInputs(volTrain, lTrain, classifier.PAD, classifier.FLIP_X, classifier.FLIP_Y, classifier.FLIP_Z)
+    testX,   testY = files.convertToInputs(volTest, lTest, classifier.PAD, False, False, False)
+    
+    print ("Dense network: %d train samples, %d test" % (len(trainX), len(testX)))
+
+    print ("Building networks...")
+    caeX, _, innerFeat, caeIsTraining, _, _ = buildCAENetwork9()
+    net = buildDenseNetwork()
+    xInput, yInput, trainOp, cost, numCorrect, predictedProbs = net['x'], net['y'], net['t'], net['c'], net['nc'], net['p']
+
+    runTest = True
+
+    iterations = int(len(trainY)/batchSize) + 1
+    saver = tf.train.Saver()
+
+    trainCosts, corrs = [], []
+    testCosts = []
+    with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
+        saver.restore(sess, loadPath)
+
+        # run epochs
+        for epoch in range(epochs):
+            start_time_epoch = datetime.datetime.now()
+            print('Training Scan %s, Epoch %d started' % (trainID, epoch))
+            trainX, trainY = util.randomShuffle(trainX, trainY)
+
+            # mini batch for trianing set:
+            totalCost, totalCorr = 0.0, 0
+            for itr in range(iterations):
+                batchX = trainX[itr*batchSize: (itr+1)*batchSize]
+                batchY = trainY[itr*batchSize: (itr+1)*batchSize]
+
+                _feat = sess.run(innerFeat, feed_dict={
+                    caeX: batchX,
+                    caeIsTraining: False
+                })
+
+                _trainOp, _cost, _corr = sess.run([trainOp, cost, numCorrect], feed_dict={
+                    caeX: batchX, # HMM
+                    caeIsTraining: False, # HMM
+                    xInput: _feat,
+                    yInput: util.oneshotY(batchY)
+                })
+                totalCost += _cost
+                totalCorr += _corr
+
+            print (">> Epoch %d had TRAIN loss: %.2f\t#Correct = %5d/%5d = %f" % (
+                epoch, totalCost, totalCorr, len(trainY), totalCorr / len(trainY)
+            ))
+            trainCosts.append(totalCost)
+            corrs.append(totalCorr/len(testY))
+
+            # Run against test set:
+            if runTest:
+                testX, testY = util.randomShuffle(testX, testY)
+                totalCost, totalCorr = 0, 0
+                itrs = int(math.ceil(len(testY)/batchSize))
+                for itr in range(itrs):
+                    batchX = testX[itr*batchSize: (itr+1)*batchSize]
+                    batchY = testY[itr*batchSize: (itr+1)*batchSize]
+            
+                    predictions, cost = densePredict(sess, caeX, innerFeat, caeIsTraining, xInput, yInput, predictedProbs, cost, batchX, batchY) 
+                    totalCost += cost
+                    totalCorr += np.sum((np.array(predictions) > 0.5) == (np.array(batchY) > 0.5))
+                end_time_epoch = datetime.datetime.now()
+                print('>> Epoch %d had  TEST loss:      \t#Correct = %5d/%5d = %f\tTime elapsed: %s' % (
+                    epoch, totalCorr, len(testY), totalCorr / len(testY), str(end_time_epoch - start_time_epoch)
+                ))
+                testCosts.append(totalCost)
+
+
+
+        # Run against test:
+        if runTest:
+            print('Testing Scan %s' % (testID))
+            testProbs = []
+            itrs = int(math.ceil(len(testY)/batchSize))
+            for itr in range(itrs):
+                batchX = testX[itr*batchSize: (itr+1)*batchSize]
+                batchY = testY[itr*batchSize: (itr+1)*batchSize]
+
+                _feat = sess.run(innerFeat, feed_dict={
+                    caeX: batchX,
+                    caeIsTraining: False
+                })
+
+                _probs = sess.run(predictedProbs, feed_dict={
+                    caeX: batchX, # HMM
+                    caeIsTraining: False, # HMM
+                    xInput: _feat,
+                    yInput: util.oneshotY(batchY)
+                })
+                testProbs.extend(np.array(_probs)[:, 1].tolist())
+    return trainCosts, testCosts, corrs, util.genScores(testY, testProbs)
+
 # Build CAE, train with all brain voxels
 SUB_SAMPLE = 40
-def trainCAE(scanID):
+def trainAndSave(scanID, savePath=None):
     epochs = N_EPOCHS    
     batchSize = BATCH_SIZE
 
@@ -153,8 +332,9 @@ def trainCAE(scanID):
     print ("Training on %d sub-volumes" % brainIndices.shape[0])
 
     xInput, xOutput, innerFeat, isTraining, trainOp, cost = buildCAENetwork9()
+    denseNet = buildDenseNetwork()
 
-    initOp = tf.global_variables_initializer()
+    saver = None if savePath is None else tf.train.Saver()
     
     costs = []
     with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
@@ -197,18 +377,32 @@ def trainCAE(scanID):
         })
         print ('Train/Test data has cost %.3f\ av = %.6f' % (_cost * lX.shape[0], _cost))
         print (_feat.shape)
-        simpleTSNE(_feat, lY)
+        # runDenseNetwork(scanID, sess, xInput, innerFeat, isTraining, lTrain, lTest, denseNet)
+        #simpleTSNE(_feat, lY)
+
+        # Save the network:
+        if savePath is not None:
+            savePath = saver.save(sess, savePath)
+            print ("Model saved to %s" % (savePath))
 
     return costs
 
-def checkNetwork(scanID, trainedNetwork):
-  pass
-
-
 def main():
-  SCAN_ID = '022'
-  trainedNetwork = trainCAE(SCAN_ID)
-  checkNetwork(SCAN_ID, trainedNetwork)
+    TRAIN_SCAN = '019'
+    CLASSIFY_TRAIN_SCAN = '022'
+    CLASSIFY_TEST_SCAN = '023'
+    savePath = "D:/projects/vessels/cae/cae%s.ckpt" % TRAIN_SCAN
+
+    if TRAIN_CAE:
+        trainAndSave(TRAIN_SCAN, savePath=savePath)
+    if CLASSIFY:
+        trainCosts, testCosts, corrs, scores = runDenseNetwork(trainID=CLASSIFY_TRAIN_SCAN, testID=CLASSIFY_TEST_SCAN, loadPath=savePath)
+        plt.plot(trainCosts, label='train cost')
+        plt.plot(testCosts, label='test cost')
+        plt.legend()
+        plt.show()
+        print(util.formatScores(scores))
+
 
   
 if __name__ == '__main__':

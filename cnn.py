@@ -1,10 +1,12 @@
 import datetime
+import gc
 import math
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.model_selection import RepeatedStratifiedKFold
 import tensorflow as tf
 from tqdm import tqdm
+
 
 import classifier
 import files
@@ -26,10 +28,10 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 #BATCH_SIZE = 0
 #RUN_LOCAL = False
 
-LEARNING_RATE = 0.001 # 0.03
+LEARNING_RATE = 0.0003 # 0.001 # 0.03
 DROPOUT_RATE = 0.65 #.5
 BASE_BATCH = 5
-N_EPOCHS = 7 if classifier.RUN_AWS else 2
+N_EPOCHS = 9 if classifier.RUN_AWS else 2
 
 BATCH_SIZE = BASE_BATCH * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
 
@@ -197,13 +199,17 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
         for epoch in range(epochs):
             start_time_epoch = datetime.datetime.now()
             print('Scan %s, Epoch %d started' % (scanID, epoch))
-            trainX, trainY = util.randomShuffle(trainX, trainY)
+            gc.collect()
+            # trainX, trainY = util.randomShuffle(trainX, trainY)
+            order = np.random.permutation(trainX.shape[0])
 
             # mini batch for trianing set:
             totalCost, totalCorr = 0.0, 0
-            for itr in range(iterations):
-                batchX = trainX[itr*batchSize: (itr+1)*batchSize]
-                batchY = trainY[itr*batchSize: (itr+1)*batchSize]
+            for itr in tqdm(range(iterations)):
+                batchX = trainX[order[itr*batchSize: (itr+1)*batchSize]]
+                batchY = trainY[order[itr*batchSize: (itr+1)*batchSize]]
+                # batchX = trainX[itr*batchSize: (itr+1)*batchSize]
+                # batchY = trainY[itr*batchSize: (itr+1)*batchSize]
                 _trainOp, _cost, _corr = sess.run([trainOp, cost, numCorrect], feed_dict={
                     xInput: batchX,
                     yInput: util.oneshotY(batchY),
@@ -219,12 +225,15 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
             # Run against test set:
             if runTest:
                 # print ("\n=======\nPart #2: Running against test voxels.")
-                testX, testY = util.randomShuffle(testX, testY)
+                # testX, testY = util.randomShuffle(testX, testY)
+                order = np.random.permutation(testX.shape[0])
                 totalCorr = 0
                 itrs = int(math.ceil(len(testY)/batchSize))
                 for itr in range(itrs):
-                    batchX = testX[itr*batchSize: (itr+1)*batchSize]
-                    batchY = testY[itr*batchSize: (itr+1)*batchSize]
+                    batchX = testX[order[itr*batchSize: (itr+1)*batchSize]]
+                    batchY = testY[order[itr*batchSize: (itr+1)*batchSize]]
+                    # batchX = testX[itr*batchSize: (itr+1)*batchSize]
+                    # batchY = testY[itr*batchSize: (itr+1)*batchSize]
                     predictions = predict(sess, scores, xInput, isTraining, batchX)
                     totalCorr += np.sum((np.array(predictions) > 0.5) == (np.array(batchY) > 0.5))
                 end_time_epoch = datetime.datetime.now()
@@ -331,8 +340,9 @@ def volumeFromSavedNet(path, scanID):
 
 if __name__ == '__main__':
     savePath = None
-    classifier.singleBrain('002', runOne, calcScore=True, writeVolume=True, savePath=savePath)
-    # classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=False, savePath=savePath)
+    # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=True, savePath=savePath)
+    #classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=False, savePath=savePath)
+    classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '056', runOne, calcScore=True, writeVolume=False, savePath=savePath)
 
     # volumeFromSavedNet(savePath, '002')
     # volumeFromSavedNet(savePath, '019')

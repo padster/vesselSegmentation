@@ -6,6 +6,9 @@ from tifffile import TiffFile, imsave
 
 import util
 
+CAST_TYPES = True
+
+
 ###
 ### MAT files
 ###
@@ -32,6 +35,7 @@ def loadPC(path='data/Normal001-MRA-PC.mat'):
 def loadRF(path='data/Normal001-MRA-RF.mat'):
     return loadMat(path, 'forest')
 def loadCNN(path='data/Normal001-MRA-CNN.mat'):
+    print ("Loading cnn from " + path)
     return loadMat(path, 'cnn')
 def loadCRF(path='data/Normal001-MRA-CRF.mat'):
     return loadMat(path, 'crf')
@@ -39,7 +43,10 @@ def loadCRF(path='data/Normal001-MRA-CRF.mat'):
 def loadFeat(path):
     print ("Loading features from " + path)
     mat = scipy.io.loadmat(path)
-    return mat.get('volMRA'), mat.get('EM'), mat.get('JV'), mat.get('PC')
+    if CAST_TYPES:
+        return mat.get('volMRA').astype(np.float32), mat.get('EM').astype(np.float32), mat.get('JV').astype(np.float32), mat.get('PC').astype(np.float32)
+    else:
+        return mat.get('volMRA'), mat.get('EM'), mat.get('JV'), mat.get('PC')
 
 def loadBM(scanID):
     path = "D:/projects/vessels/inputs/%s/Normal%s-MRA-BM.mat" % (scanID, scanID)
@@ -99,8 +106,8 @@ def loadAllInputs(allFeatures):
 def loadAllInputsUpdated(scanID, allFeatures, moreFeatures, noTrain=False):
     # fsPath = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
     fsPath     = "%s/%s/Normal%s-MRA-FS.mat" % (BASE_PATH, scanID, scanID)
-    lTrainPath = "%s/%s/Normal%s-MRA_annotationVess_training_C.mat" % (BASE_PATH, scanID, scanID)
-    lTestPath  = "%s/%s/Normal%s-MRA_annotationVess_training_C.mat" % (BASE_PATH, scanID, scanID)
+    lTrainPath = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (BASE_PATH, scanID, scanID)
+    lTestPath  = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (BASE_PATH, scanID, scanID)
     
     print ("Loading data for scan %s" % (scanID))
     data, featEM, featJV, featPC = loadFeat(fsPath)
