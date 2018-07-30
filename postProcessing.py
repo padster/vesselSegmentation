@@ -1,3 +1,4 @@
+import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as ndi
@@ -272,10 +273,27 @@ def doSkeleton(scanID):
   plt.show()
 
 
+def doMatToTif():
+  SCAN_ID = '022'
+  MAT_FILE = "/%s/Normal%s-MRA-CNN%s.mat" % (SCAN_ID, SCAN_ID, "-trans" if SCAN_ID == "023" else "")
+  cnnData = files.loadCNN(files.BASE_PATH + MAT_FILE)
+  print (cnnData.shape)
+  
+  # TIFF_FILE = "/%s/Normal%s-MRA-CNN%s.tif" % (SCAN_ID, SCAN_ID, "-trans" if SCAN_ID == "023" else "")
+  # files.tiffWrite(files.BASE_PATH + TIFF_FILE, cnnData)
+
+  # convert to 8bit int:
+  # img = (cnnData * 255).astype(np.uint8)
+  # ret, imgf = cv.threshold(img, 0, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+  # th3 = cv.adaptiveThreshold(img, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
+  # TIFF_ADTHRESH_FILE = "/%s/Normal%s-MRA-CNN%s-adthresh.tif" % (SCAN_ID, SCAN_ID, "-trans" if SCAN_ID == "023" else "")
+  # files.tiffWrite(files.BASE_PATH + TIFF_ADTHRESH_FILE, th3)
 
 def main():
   # doCRF()
-  doSkeleton('022')
+  # doSkeleton('022')
+  # doMatToTif()
+  pass
 
 
 if __name__ == '__main__':

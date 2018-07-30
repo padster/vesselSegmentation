@@ -342,7 +342,9 @@ if __name__ == '__main__':
     savePath = None
     # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=True, savePath=savePath)
     #classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=False, savePath=savePath)
-    classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '056', runOne, calcScore=True, writeVolume=False, savePath=savePath)
+    # classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '056', runOne, calcScore=True, writeVolume=False, savePath=savePath)
+
+    classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '084', runOne, calcScore=True, writeVolume=False, savePath=savePath)
 
     # volumeFromSavedNet(savePath, '002')
     # volumeFromSavedNet(savePath, '019')

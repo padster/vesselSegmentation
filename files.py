@@ -7,7 +7,7 @@ from tifffile import TiffFile, imsave
 import util
 
 CAST_TYPES = True
-
+USE_PREPROC = True
 
 ###
 ### MAT files
@@ -15,6 +15,7 @@ CAST_TYPES = True
 
 
 BASE_PATH = "D:/projects/vessels/inputs"
+
 
 # HACK: Set by caller
 CNN_FEAT = False
@@ -41,7 +42,7 @@ def loadCRF(path='data/Normal001-MRA-CRF.mat'):
     return loadMat(path, 'crf')
     
 def loadFeat(path):
-    print ("Loading features from " + path)
+    # print ("Loading features from " + path)
     mat = scipy.io.loadmat(path)
     if CAST_TYPES:
         return mat.get('volMRA').astype(np.float32), mat.get('EM').astype(np.float32), mat.get('JV').astype(np.float32), mat.get('PC').astype(np.float32)
@@ -84,31 +85,17 @@ def convertToInputs(data, labels, pad, flipX, flipY, flipZ):
             pass
     return np.array(Xs), np.array(Ys)
 
-"""
-# Load intensities, plus optionally other features as second channels
-def loadAllInputs(allFeatures):
-    print ("Loading volume intensitites...")
-    data = loadMRA()
-    if allFeatures:
-        print ("Loading features...")
-        featEM, featJV, featPC = loadEM(), loadJV(), loadPC()
-        assert data.shape == featEM.shape
-        assert data.shape == featJV.shape
-        assert data.shape == featPC.shape
-        data = np.stack([data, featEM, featJV, featPC], axis=-1)
-    else:
-        data = np.stack([data], axis=-1)
-    print ("Input data loaded, shape = %s" % (str(data.shape)))
-    labels = loadLabels()
-    return data, labels
-"""
-
 def loadAllInputsUpdated(scanID, allFeatures, moreFeatures, noTrain=False):
     # fsPath = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
     fsPath     = "%s/%s/Normal%s-MRA-FS.mat" % (BASE_PATH, scanID, scanID)
     lTrainPath = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (BASE_PATH, scanID, scanID)
     lTestPath  = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (BASE_PATH, scanID, scanID)
-    
+
+    if USE_PREPROC:
+        if scanID == '084':
+            fsPath = "%s/%s/Normal%s-MRA-FS-preproc.mat" % (BASE_PATH, scanID, scanID)
+            print ("USING PREPROC")
+
     print ("Loading data for scan %s" % (scanID))
     data, featEM, featJV, featPC = loadFeat(fsPath)
     assert data.shape == featEM.shape

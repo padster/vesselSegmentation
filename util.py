@@ -68,10 +68,11 @@ def genSimpleFeatures(volume):
 	  genBlurSharpen(volume, 5.0)
 
 # Given true and predicted Y, generate the scores we care about
-def genScores(trueY, predicted):
+def genScores(trueY, predicted, T1=0.5, T2=None):
 	assert len(trueY) == len(predicted)
-	trueY = (np.array(trueY) > 0.5)
-	predY = (np.array(predicted) > 0.5)
+	T2 = T1 if T2 is None else T2
+	trueY = (np.array(trueY) > T1)
+	predY = (np.array(predicted) > T2)
 	TP = np.sum(  predY	 &   trueY )
 	FP = np.sum(  predY	 & (~trueY))
 	TN = np.sum((~predY) & (~trueY))
@@ -80,16 +81,16 @@ def genScores(trueY, predicted):
 		(TP + TN) / (TP + TN + FP + FN), # Accuracy
 		(TP) / (TP + FN), # Sensitivity
 		(TN) / (TN + FP), # Specificity
-		(TP + TP) / (TP + TP + FP + FN), # F1
+		(TP + TP) / (TP + TP + FP + FN), # Dice
 		roc_auc_score(trueY, predicted)
 	]
 
 def formatScores(scores):
-	return """Accuracy:	%3.3f%%
+	return """Accuracy   : %3.3f%%
 Sensitivity: %3.3f%%
 Specificity: %3.3f%%
-F1 score:	%1.5f
-ROC AUC:	 %1.5f""" % (scores[0]*100, scores[1]*100, scores[2]*100, scores[3], scores[4])
+Dice score : %1.5f
+ROC AUC    : %1.5f""" % (scores[0]*100, scores[1]*100, scores[2]*100, scores[3], scores[4])
 
 
 def formatTable(colVals, rowVals, tableVals):
