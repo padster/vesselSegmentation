@@ -1,42 +1,64 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.io
-from scipy.optimize import leastsq
+from scipy.optimize import leastsq, least_squares
 
 import files
 import util
 
 
+def gauss( x, c1, mu1, sigma1 ):
+  return c1 * np.exp( -(x - mu1)**2.0 / (2.0 * sigma1**2.0) )
+
+def rayleigh( x, c1, sigma1 ):
+  return c1 * x * np.exp( - x**2.0 / (2.0 * sigma1**2.0) ) 
+
 # https://stackoverflow.com/questions/33178790/how-to-fit-a-double-gaussian-distribution-in-python
-def double_gaussian( x, params ):
-    (c1, mu1, sigma1, c2, mu2, sigma2) = params
-    res =   c1 * np.exp( - (x - mu1)**2.0 / (2.0 * sigma1**2.0) ) \
-          + c2 * np.exp( - (x - mu2)**2.0 / (2.0 * sigma2**2.0) )
-    return res
+def multiDistribution( x, params ):
+  (c1, sigma1, c2, mu2, sigma2, c3, mu3, sigma3, c4, mu4, sigma4) = params
+  return rayleigh(x, c1, sigma1) + \
+    gauss(x, c2, mu2, sigma2) + \
+    gauss(x, c3, mu3, sigma3) + \
+    gauss(x, c4, mu4, sigma4) 
+
+
+
 
 BINS = 400
-def calculateFirstPeaks(data, plot=False):
+def calculateVesselPeak(data, plot=False, scanID=None):
   ys, xs = np.histogram(data.flatten(), bins=BINS, normed=True)
   xs = (xs[:-1] + xs[1:]) / 2.0
 
-  def double_gaussian_fit( params ):
-      fit = double_gaussian( xs, params )
-      return (fit - ys)
+  def distributionFit( params ):
+      return multiDistribution( xs, params ) - ys
 
-  fit = leastsq( double_gaussian_fit, [0.8, 0.015, 0.1,  0.5, 0.12, 0.1] )
-  fitYs = double_gaussian(xs, fit[0])
+  # fit = leastsq( double_gaussian_fit, [0.8, 0.015, 0.1,  0.5, 0.12, 0.1] )
+  I = np.inf
+  POS, NIL = [0, I], [-I, I]
+  boundsWrong = (
+    POS, NIL, \
+    POS, POS, POS, \
+    POS, POS, POS, \
+    POS, POS, POS
+  )
+  bounds = (tuple(b[0] for b in boundsWrong), tuple(b[1] for b in boundsWrong))
+  # print (bounds)
+  # bounds = (-I, I)
+  fit = leastsq( distributionFit, [30, -0.03, 8, 0.01, 0.05, 1, 0.08, 0.05, 5, 0.12, 0.1])[0] #, ftol=1e-11, method='dogbox', bounds=bounds).x
+  fitYs = multiDistribution(xs, fit)
+  vPeak = max(fit[3], fit[6], fit[9])
   if plot:
-    plt.hist(data.flatten(), bins=BINS, normed=True)
-    plt.plot(xs, fitYs)
+    plt.title("Distribution for Scan %s (vessel peak %.3f)" % (scanID, vPeak))
+    plt.hist(data.flatten(), bins=BINS, normed=True, label="Intensity histogram", alpha=0.5)
+    plt.plot(xs, fitYs, label="Best Fit", linewidth=3)
+    plt.plot(xs, rayleigh(xs, fit[0], fit[1]), linestyle='--', label="%.3f * R(%.3f)" % (fit[0], fit[1]))
+    plt.plot(xs, gauss(xs, fit[2], fit[3], fit[4]), linestyle='--', label="%.3f * N(%.3f, %.3f)" % (fit[2], fit[3], fit[3]))
+    plt.plot(xs, gauss(xs, fit[5], fit[6], fit[7]), linestyle='--', label="%.3f * N(%.3f, %.3f)" % (fit[5], fit[6], fit[7]))
+    plt.plot(xs, gauss(xs, fit[8], fit[9], fit[10]), linestyle='--', label="%.3f * N(%.3f, %.3f)" % (fit[8], fit[9], fit[10]))
+    plt.legend()
     plt.show()
-  a, b = fit[0][1], fit[0][4]
-  return min(a, b), max(a, b)
+  return vPeak
 
-  """
-  localPeak = np.logical_and(ys[:-2] < ys[1:-1], ys[1:-1] > ys[2:])
-  binMids = (xs[1:-2][localPeak] + xs[2:-1][localPeak]) / 2
-  return binMids[0], binMids[1]
-  """
 
 
 
@@ -60,13 +82,16 @@ def printHistogramPeaks():
     p1, p2 = calculateFirstPeaks(data)
     print ('%s : %.3f -> %.3f' % (scanID, p1, p2))
 
-def normalizeHistogram(scanID, newP1=0.017, newP2=0.125, plot=False):
+def normalizeHistogram(scanID, newPeak=0.125, plot=False):
   mraPath = "/%s/Normal%s-MRA-FS.mat" % (scanID, scanID)
   data, em, jv, pc = files.loadFeat(files.BASE_PATH + mraPath)
   if plot:
     plt.hist(data.flatten(), bins=400, normed=True, label='before')
-  p1, p2 = calculateFirstPeaks(data)
-  print ('Normalizing %s: From %.3f -> %.3f, To %.3f -> %.3f' % (scanID, p1, p2, newP1, newP2))
+  vPeak = calculateVesselPeak(data, plot=True, scanID=scanID)
+  print ('Normalizing %s: From %.3f to %.3f' % (scanID, vPeak, newPeak))
+
+  print ("TODO")
+  """
   # Case 1: 
   idA, idB, idC = (data <= p1), np.logical_and(p1 < data, data <= p2), (p2 < data)
   data[idA] =     0 + (data[idA] -  0) * (newP1 -     0) / (p1 -  0) #  0 ->     0, p1 -> newP1
@@ -75,20 +100,20 @@ def normalizeHistogram(scanID, newP1=0.017, newP2=0.125, plot=False):
   q1, q2 = calculateFirstPeaks(data)
   print ('Normalized  %s: Peaks now %.3f -> %.3f' % (scanID, q1, q2))
   if plot:
-    plt.hist(data.flatten(), bins=400, normed=True, label='after')
-    plt.legend()
+    # plt.hist(data.flatten(), bins=400, normed=True, label='after')
+    # plt.legend()
     plt.show()
-
   newMRAPath = "/%s/Normal%s-MRA-FS-preproc.mat" % (scanID, scanID)
   data = {'volMRA': data, 'EM': em, 'JV': jv, 'PC': pc}
   scipy.io.savemat(files.BASE_PATH + newMRAPath, data)
   print ("Saved to " + files.BASE_PATH + newMRAPath)
+  """
 
 
 
 def main():
   # printHistogramPeaks()
-  normalizeHistogram('084', plot=True)
+  normalizeHistogram('082', plot=False)
 
 if __name__ == '__main__':
   main()
