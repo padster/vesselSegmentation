@@ -1,4 +1,4 @@
-# Run this as 'python paper/<code>.py'
+# Run this as 'python paperCode/<code>.py'
 import os
 import sys
 sys.path.append(os.getcwd())
@@ -17,7 +17,7 @@ pd.set_option('precision', 3)
 import files
 import util
 
-SCAN_IDS = ['002', '019', '022', '023', '034', '058', '066', '082'] # [, '084']
+SCAN_IDS = ['002', '019', '022', '023', '034', '056', '058', '066', '082'] # [, '084']
 FEATURES = ['raw', 'EM', 'JV', 'PC']
 METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
 
@@ -76,8 +76,6 @@ def generateResults():
   print ("\n\nAverage scores across scans:")
   print ("-----------")
   print (pd.DataFrame(np.hstack(tuple(allMeans)), FEATURES, METRICS))
-
-
 
 
 if __name__ == '__main__':

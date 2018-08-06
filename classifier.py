@@ -1,5 +1,6 @@
 import gc
 import numpy as np
+np.random.seed(0)
 
 import files
 import util
@@ -8,42 +9,54 @@ SIZE = 9
 PAD = (SIZE-1)//2
 
 import sys
-RUN_AWS = "--local" not in sys.argv
-ALL_FEAT = "--features" in sys.argv
-MORE_FEAT = "--morefeat" in sys.argv
-SAVE_NET = "--save" in sys.argv
-LOAD_NET = "--load" in sys.argv
-FLIP_X = "--flipx" in sys.argv
-FLIP_Y = "--flipy" in sys.argv
-FLIP_Z = "--flipz" in sys.argv
-PREDICT_TRANSFORM = "--trans" in sys.argv
-CNN_FEAT = "--cnnfeat" in sys.argv
-files.CNN_FEAT = CNN_FEAT # HACK
 
-N_FEAT = 1
-if ALL_FEAT:
-    N_FEAT += 3
-if CNN_FEAT:
-    N_FEAT += 1
-if MORE_FEAT:
-    N_FEAT += 6
+N_FEAT, RUN_AWS, ALL_FEAT, MORE_FEAT, SAVE_NET, LOAD_NET, FLIP_X, FLIP_Y, FLIP_Z, PREDICT_TRANSFORM, CNN_FEAT, ONE_FEAT, ONE_FEAT_NAME = \
+    None, None, None, None, None, None, None, None, None, None, None, None, None,
 
+def initOptions(argv):
+    global N_FEAT, RUN_AWS, ALL_FEAT, MORE_FEAT, SAVE_NET, LOAD_NET, FLIP_X, FLIP_Y, FLIP_Z, PREDICT_TRANSFORM, CNN_FEAT, ONE_FEAT, ONE_FEAT_NAME
 
-print ("====\nTarget: %s\nVolume: %dx%dx%d\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n%s====\n" % (
-    "AWS" if RUN_AWS else "Local",
-    SIZE, SIZE, SIZE,
-    "All" if ALL_FEAT else "Intensity",
-    "Loading from file\n" if LOAD_NET else "",
-    "Saving to file\n" if SAVE_NET else "",
-    str(FLIP_X),
-    str(FLIP_Y),
-    str(FLIP_Z),
-    "Predict with transform\n" if PREDICT_TRANSFORM else "",
-))
+    RUN_AWS = "--local" not in argv
+    ALL_FEAT = "--features" in argv
+    MORE_FEAT = "--morefeat" in argv
+    SAVE_NET = "--save" in argv
+    LOAD_NET = "--load" in argv
+    FLIP_X = "--flipx" in argv
+    FLIP_Y = "--flipy" in argv
+    FLIP_Z = "--flipz" in argv
+    PREDICT_TRANSFORM = "--trans" in argv
+    CNN_FEAT = "--cnnfeat" in argv
+    files.CNN_FEAT = CNN_FEAT # HACK
+    ONE_FEAT = "--onefeat" in argv
+
+    N_FEAT = 1
+    if ALL_FEAT:
+        N_FEAT += 3
+    if CNN_FEAT:
+        N_FEAT += 1
+    if MORE_FEAT:
+        N_FEAT += 6
+    if ONE_FEAT:
+        N_FEAT += 1
+
+    print ("====\nTarget: %s\n# Features: %d\nVolume: %dx%dx%d\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n%s%s ====\n" % (
+        "GPU" if RUN_AWS else "Local",
+        N_FEAT,
+        SIZE, SIZE, SIZE,
+        "All" if ALL_FEAT else "Intensity",
+        "Loading from file\n" if LOAD_NET else "",
+        "Saving to file\n" if SAVE_NET else "",
+        str(FLIP_X),
+        str(FLIP_Y),
+        str(FLIP_Z),
+        "Predict with transform\n" if PREDICT_TRANSFORM else "",
+        ("With only feature %s\n" % (ONE_FEAT_NAME)) if ONE_FEAT_NAME is not None else "",
+    ))
+
 
 
 def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):
-  data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT, MORE_FEAT)
+  data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT, MORE_FEAT, oneFeat=ONE_FEAT_NAME)
 
   if calcScore:
     trainX, trainY = files.convertToInputs(data, labelsTrain, PAD, FLIP_X, FLIP_Y, FLIP_Z)
@@ -62,7 +75,7 @@ def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, 
     print ("Loading points from scans: %s" % (str(fromIDs)))
     for fromID in fromIDs:
         print ("  ... loading %s" % (fromID))
-        fromX, fromY = files.convertScanToXY(fromID, ALL_FEAT, MORE_FEAT, PAD, FLIP_X, FLIP_Y, FLIP_Z, merge=True)
+        fromX, fromY = files.convertScanToXY(fromID, ALL_FEAT, MORE_FEAT, PAD, FLIP_X, FLIP_Y, FLIP_Z, merge=True, oneFeat=ONE_FEAT_NAME)
         if trainX is None:
             trainX, trainY = fromX, fromY
         else:
@@ -71,54 +84,17 @@ def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, 
         gc.collect()
     print ("Train X / Y shapes = ", trainX.shape, trainY.shape)
 
+    toReturn = None
     if calcScore:
-        toX, toY = files.convertScanToXY(toID, ALL_FEAT, MORE_FEAT, PAD, False, False, False, merge=True)
+        toX, toY = files.convertScanToXY(toID, ALL_FEAT, MORE_FEAT, PAD, False, False, False, merge=True, oneFeat=ONE_FEAT_NAME)
         print ("Test X / Y shapes = ", toX.shape, toY.shape)
         _, _, scores = runOneFunc(trainX, trainY, toX, toY, toID, savePath)
         print ("  Results\n  -------\n" + util.formatScores(scores))
         print ("\n\n\n")
+        toReturn = scores
 
     if writeVolume:
-        data, _, _ = files.loadAllInputsUpdated(toID, ALL_FEAT, MORE_FEAT)
-        runOneFunc(trainX, trainY, data, None, toID, savePath)
-
-""" TODO: bring back?
-def runKFold(Xs, Ys):
-    Cross-validate using stratified KFold:
-      * split into K folds, keeping the same true/false proportion.
-      * use (K-1) to train and 1 to test
-      * run a bunch of times
-
-    print ("Input: %d, %d T, %d F" % (len(Ys), sum(Ys == 1), sum(Ys == 0)))
-
-    rskf = RepeatedStratifiedKFold(n_splits=N_FOLDS, n_repeats=N_REPEATS, random_state=RANDOM_SEED)
-    splits = [(a, b) for a, b in rskf.split(Xs, Ys)]
-
-    allCosts, allCorrs, allScores = [], [], []
-    for i, (trainIdx, testIdx) in enumerate(splits):
-        print ("Split %d / %d" % (i + 1, len(splits)))
-        trainX, trainY = Xs[trainIdx], Ys[trainIdx]
-        testX, testY = Xs[testIdx], Ys[testIdx]
-        runCosts, runCorrs, runScores = runOne(trainX, trainY, testX, testY, i)
-        allCosts.append(runCosts)
-        allCorrs.append(runCorrs)
-        allScores.append(runScores)
-        print ("Split %d scores = %s" % (i + 1, str(runScores)))
-
-
-    ax = viz.clean_subplots(1, 2, show=(not RUN_AWS))
-    ax[0][0].set_title("Loss over epochs, per split")
-    ax[0][0].plot(np.array(allCosts).T)
-    ax[0][1].set_title("%Correct over epochs, per split ")
-    ax[0][1].plot(np.array(allCorrs).T)
-
-    image_path = "images/LossAndCorrect.png"
-    plt.gcf().set_size_inches(18.5, 10.5)
-    plt.savefig(image_path)
-    print ("Image saved to %s" % str(image_path))
-
-    if not RUN_AWS:
-        plt.show()
-
-    print ("Average scores: %s" % (np.mean(allScores, axis=0)))
-"""
+        data, _, _ = files.loadAllInputsUpdated(toID, ALL_FEAT, MORE_FEAT, oneFeat=ONE_FEAT_NAME)
+        _, _, volume = runOneFunc(trainX, trainY, data, None, toID, savePath)
+        toReturn = volume
+    return toReturn

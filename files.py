@@ -85,7 +85,7 @@ def convertToInputs(data, labels, pad, flipX, flipY, flipZ):
             pass
     return np.array(Xs), np.array(Ys)
 
-def loadAllInputsUpdated(scanID, allFeatures, moreFeatures, noTrain=False):
+def loadAllInputsUpdated(scanID, allFeatures, moreFeatures, oneFeat=None, noTrain=False):
     # fsPath = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
     fsPath     = "%s/%s/Normal%s-MRA-FS.mat" % (BASE_PATH, scanID, scanID)
     lTrainPath = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (BASE_PATH, scanID, scanID)
@@ -106,6 +106,14 @@ def loadAllInputsUpdated(scanID, allFeatures, moreFeatures, noTrain=False):
     if allFeatures:
         allStacks.extend([featEM, featJV, featPC])
 
+    if oneFeat is not None:
+        if oneFeat == 'EM':
+            allStacks.extend([featEM])
+        elif oneFeat == 'JV':
+            allStacks.extend([featJV])
+        elif oneFeat == 'PC':
+            allStacks.extend([featPC])
+
     if moreFeatures:
         allStacks.extend(util.genSimpleFeatures(data))
 
@@ -123,8 +131,8 @@ def loadAllInputsUpdated(scanID, allFeatures, moreFeatures, noTrain=False):
     else:
         return data, loadLabels(lTrainPath), loadLabels(lTestPath)
 
-def convertScanToXY(scanID, allFeatures, moreFeatures, pad, flipX, flipY, flipZ, merge):
-    data, labelsTrain, labelsTest = loadAllInputsUpdated(scanID, allFeatures, moreFeatures)
+def convertScanToXY(scanID, allFeatures, moreFeatures, pad, flipX, flipY, flipZ, merge, oneFeat=None):
+    data, labelsTrain, labelsTest = loadAllInputsUpdated(scanID, allFeatures, moreFeatures, oneFeat)
     if merge:
         labels = np.vstack((labelsTrain, labelsTest))
         return convertToInputs(data, labels, pad, flipX, flipY, flipZ)

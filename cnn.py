@@ -4,6 +4,7 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.model_selection import RepeatedStratifiedKFold
+import sys
 import tensorflow as tf
 from tqdm import tqdm
 
@@ -12,6 +13,8 @@ import classifier
 import files
 import util
 import viz
+
+tf.set_random_seed(0)
 
 
 N_FOLDS = 2 # Train on 1/2, Test on 1/2
@@ -31,9 +34,12 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 LEARNING_RATE = 0.0003 # 0.001 # 0.03
 DROPOUT_RATE = 0.65 #.5
 BASE_BATCH = 5
-N_EPOCHS = 9 if classifier.RUN_AWS else 2
+N_EPOCHS = 7
 
 BATCH_SIZE = BASE_BATCH * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
+
+def kInit(seed):
+    return tf.glorot_normal_initializer(seed=seed)
 
 def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     # nFilt = [64, 128, 128]
@@ -45,17 +51,17 @@ def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAN
     isTraining = tf.placeholder(tf.bool)
 
     with tf.name_scope("layer_a"):
-        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 7x7x7
-        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 7x7x7
+        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu, kernel_initializer=kInit(1)) # 7x7x7
+        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu, kernel_initializer=kInit(2)) # 7x7x7
         pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[3,3,3], strides=2) # 3x3x3
     with tf.name_scope("batch_norm"):
         cnn3d_bn = tf.layers.batch_normalization(inputs=pool3, training=isTraining)
     with tf.name_scope("fully_con"):
         flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*nFilt[1]])
-        dense = tf.layers.dense(inputs=flattening, units=nFilt[2], activation=tf.nn.relu)
-        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=isTraining)
+        dense = tf.layers.dense(inputs=flattening, units=nFilt[2], activation=tf.nn.relu, kernel_initializer=kInit(5))
+        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=isTraining, seed=123)
     with tf.name_scope("y_conv"):
-        prediction = tf.layers.dense(inputs=dropout, units=2)
+        prediction = tf.layers.dense(inputs=dropout, units=2, kernel_initializer=kInit(6))
         predictedProbs = tf.nn.softmax(prediction)
     with tf.name_scope("cross_entropy"):
         cost = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
@@ -81,23 +87,23 @@ def buildNetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAN
     isTraining = tf.placeholder(tf.bool)
 
     with tf.name_scope("layer_a"):
-        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 9x9x9
-        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 9x9x9
+        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu, kernel_initializer=kInit(1)) # 9x9x9
+        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu, kernel_initializer=kInit(2)) # 9x9x9
         pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[2,2,2], strides=2, padding='same') # 5x5x5
 
     with tf.name_scope("layer_b"):
-        conv4 = tf.layers.conv3d(inputs=pool3, filters=nFilt[2], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu) #5x5x5
-        conv5 = tf.layers.conv3d(inputs=conv4, filters=nFilt[3], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu) #5x5x5
+        conv4 = tf.layers.conv3d(inputs=pool3, filters=nFilt[2], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu, kernel_initializer=kInit(3)) #5x5x5
+        conv5 = tf.layers.conv3d(inputs=conv4, filters=nFilt[3], kernel_size=[3,3,3], padding='same', activation=tf.nn.relu, kernel_initializer=kInit(4)) #5x5x5
         pool6 = tf.layers.max_pooling3d(inputs=conv5, pool_size=[2,2,2], strides=2, padding='same') #3x3x3
 
     with tf.name_scope("batch_norm"):
         cnn3d_bn = tf.layers.batch_normalization(inputs=pool6, training=isTraining)
     with tf.name_scope("fully_con"):
         flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*nFilt[3]])
-        dense = tf.layers.dense(inputs=flattening, units=nFilt[4], activation=tf.nn.relu)
-        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=isTraining)
+        dense = tf.layers.dense(inputs=flattening, units=nFilt[4], activation=tf.nn.relu, kernel_initializer=kInit(5))
+        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=isTraining, seed=123)
     with tf.name_scope("y_conv"):
-        prediction = tf.layers.dense(inputs=dropout, units=2)
+        prediction = tf.layers.dense(inputs=dropout, units=2, kernel_initializer=kInit(6))
         predictedProbs = tf.nn.softmax(prediction)
     with tf.name_scope("cross_entropy"):
         cost = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
@@ -120,23 +126,23 @@ def buildNetwork11(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RA
     isTraining = tf.placeholder(tf.bool)
 
     with tf.name_scope("layer_a"):
-        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 11x11x11
-        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 11x11x11
+        conv1 = tf.layers.conv3d(inputs=xInput, filters=nFilt[0], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu, kernel_initializer=kInit(1)) # 11x11x11
+        conv2 = tf.layers.conv3d(inputs=conv1, filters=nFilt[1], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu, kernel_initializer=kInit(2)) # 11x11x11
         pool3 = tf.layers.max_pooling3d(inputs=conv2, pool_size=[2,2,2], strides=2, padding='same') # 6x6x6
 
     with tf.name_scope("layer_b"):
-        conv4 = tf.layers.conv3d(inputs=pool3, filters=nFilt[2], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 6x6x6
-        conv5 = tf.layers.conv3d(inputs=conv4, filters=nFilt[3], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu) # 6x6x6
+        conv4 = tf.layers.conv3d(inputs=pool3, filters=nFilt[2], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu, kernel_initializer=kInit(3)) # 6x6x6
+        conv5 = tf.layers.conv3d(inputs=conv4, filters=nFilt[3], kernel_size=[3,3,3], padding='same', activation=tf.nn.selu, kernel_initializer=kInit(4)) # 6x6x6
         pool6 = tf.layers.max_pooling3d(inputs=conv5, pool_size=[2,2,2], strides=2, padding='same') # 3x3x3
 
     with tf.name_scope("batch_norm"):
         cnn3d_bn = tf.layers.batch_normalization(inputs=pool6, training=isTraining)
     with tf.name_scope("fully_con"):
         flattening = tf.reshape(cnn3d_bn, [-1, 3*3*3*nFilt[3]])
-        dense = tf.layers.dense(inputs=flattening, units=nFilt[4], activation=tf.nn.relu)
-        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=isTraining)
+        dense = tf.layers.dense(inputs=flattening, units=nFilt[4], activation=tf.nn.relu, kernel_initializer=kInit(5))
+        dropout = tf.layers.dropout(inputs=dense, rate=dropoutRate, training=isTraining, seed=123)
     with tf.name_scope("y_conv"):
-        prediction = tf.layers.dense(inputs=dropout, units=2)
+        prediction = tf.layers.dense(inputs=dropout, units=2, kernel_initializer=kInit(6))
         predictedProbs = tf.nn.softmax(prediction)
     with tf.name_scope("cross_entropy"):
         cost = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
@@ -186,7 +192,6 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
         raise 0
     xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = buildFunc()
 
-    initOp = tf.global_variables_initializer()
     saver = None if savePath is None else tf.train.Saver()
 
     costs, corrs = [], []
@@ -292,7 +297,7 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
     if testProbs is not None:
         return costs, corrs, util.genScores(testY, testProbs)
     else:
-        return costs, corrs, None
+        return costs, corrs, volumeResult
 
 
 # TODO: Migrate to classifier
@@ -339,12 +344,14 @@ def volumeFromSavedNet(path, scanID):
 
 
 if __name__ == '__main__':
+    classifier.initOptions(sys.argv)
+
     savePath = None
-    # classifier.singleBrain('002', runOne, calcScore=True, writeVolume=True, savePath=savePath)
+    classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False, savePath=savePath)
     #classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=False, savePath=savePath)
     # classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '056', runOne, calcScore=True, writeVolume=False, savePath=savePath)
 
-    classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '084', runOne, calcScore=True, writeVolume=False, savePath=savePath)
+    # classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '084', runOne, calcScore=True, writeVolume=False, savePath=savePath)
 
     # volumeFromSavedNet(savePath, '002')
     # volumeFromSavedNet(savePath, '019')
