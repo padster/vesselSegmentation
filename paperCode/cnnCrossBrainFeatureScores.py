@@ -67,9 +67,10 @@ if __name__ == '__main__':
 
   collector = {}
   runExperiment(False, None, collector)
-  # for singleFeat in ['EM', 'JV', 'PC']:
-    # runExperiment(False, singleFeat, collector)
-  # runExperiment(True, None, collector)
+  runExperiment(False, 'EM', collector)
+  runExperiment(False, 'JV', collector)
+  runExperiment(False, 'PC', collector)
+  runExperiment(True, None, Collector)
 
   for k, v in collector.items():
     print (k)
