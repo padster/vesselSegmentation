@@ -14,8 +14,8 @@ USE_PREPROC = True
 ###
 
 
-BASE_PATH = "D:/projects/vessels/inputs"
-
+# BASE_PATH = "D:/projects/vessels/inputs"
+BASE_PATH = "/home/ubuntu/data/inputs"
 
 # HACK: Set by caller
 CNN_FEAT = False
@@ -40,7 +40,7 @@ def loadCNN(path='data/Normal001-MRA-CNN.mat'):
     return loadMat(path, 'cnn')
 def loadCRF(path='data/Normal001-MRA-CRF.mat'):
     return loadMat(path, 'crf')
-    
+
 def loadFeat(path):
     # print ("Loading features from " + path)
     mat = scipy.io.loadmat(path)

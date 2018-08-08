@@ -37,7 +37,7 @@ def generateResults(scanIDs, experimentName):
   allValues = np.vstack((accs, senss, specs, dices, aucs))
   means = np.mean(allValues, axis=1)[np.newaxis].T
   withMean = np.hstack((allValues, means))
-  
+
   withMeanDF = pd.DataFrame(withMean, METRICS, scanIDs + ['Mean'])
   withMeanDF.to_csv("paperCode/results/%s.csv" % experimentName)
   return withMeanDF
@@ -50,7 +50,7 @@ def runExperiment(allFeat, singleFeat, collector):
   elif singleFeat is not None:
     expName = "ONE_FEATURE_" + singleFeat
 
-  opt = ['--flipx', '--flipy', '--flipz']
+  opt = ['--flipx', '--flipy', '--flipz', '--trans']
   if allFeat:
     opt.append('--features')
     classifier.ONE_FEAT_NAME = None
@@ -64,7 +64,7 @@ def runExperiment(allFeat, singleFeat, collector):
 
 if __name__ == '__main__':
   random.shuffle(SCAN_IDS)
-  
+
   collector = {}
   runExperiment(False, None, collector)
   # for singleFeat in ['EM', 'JV', 'PC']:
