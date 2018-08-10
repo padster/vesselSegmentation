@@ -17,7 +17,7 @@ import files
 import util
 
 CNN_FUNC = cnn.runOne
-SCAN_IDS = ['002'] #, '019', '022', '023', '034', '056', '058', '066', '082']
+SCAN_IDS = ['002', '019', '022', '023', '034', '056', '058', '066', '082']
 METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
 
 def trainOffAllVolumes(allFeat):
