@@ -301,20 +301,28 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
 
 
 # TODO: Migrate to classifier
-def volumeFromSavedNet(path, scanID):
+def volumeFromSavedNet(netPath, scanID, resultPath):
+    # resultPath = "data/multiV/04_25/Normal%s-MRA-CNN.mat" % (scanID)
     tf.reset_default_graph()
 
-    print ("Using network %s to generate volume %s" % (path, scanID))
-    volume, _, _ = files.loadAllInputsUpdated(scanID, classifier.ALL_FEAT)
+    print ("Using network %s to generate volume %s" % (netPath, scanID))
+    volume, _, _ = files.loadAllInputsUpdated(scanID, classifier.ALL_FEAT, classifier.MORE_FEAT, oneFeat=classifier.ONE_FEAT_NAME)
 
-    buildFunc = buildNetwork9 if classifier.SIZE == 9 else buildNetwork7
+    buildFunc = None
+    if classifier.SIZE == 7:
+        buildFunc = buildNetwork7
+    elif classifier.SIZE == 9:
+        buildFunc = buildNetwork9
+    elif classifier.SIZE == 11:
+        buildFunc = buildNetwork11
+
     xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = buildFunc()
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
         print ("Loading net from file...")
         start_time = datetime.datetime.now()
-        saver.restore(sess, path)
+        saver.restore(sess, netPath)
 
         # Generate entire volume:
         print ("\nGenerating all predictions for volume %s" % (scanID))
@@ -334,7 +342,6 @@ def volumeFromSavedNet(path, scanID):
 
         volumeResult = np.zeros(volume.shape[0:3])
         volumeResult = files.fillPredictions(volumeResult, allPreds, pad)
-        resultPath = "data/multiV/04_25/Normal%s-MRA-CNN.mat" % (scanID)
         print ("Writing to %s" % (resultPath))
         files.writePrediction(resultPath, "cnn", volumeResult)
 

@@ -14,9 +14,9 @@ USE_PREPROC = True
 ###
 
 
-# BASE_PATH = "D:/projects/vessels/inputs"
+BASE_PATH = "D:/projects/vessels/inputs"
 # BASE_PATH = "/home/ubuntu/data/inputs"
-BASE_PATH = "data/inputs"
+# BASE_PATH = "data/inputs"
 
 # HACK: Set by caller
 CNN_FEAT = False
@@ -161,7 +161,7 @@ def fillPredictions(result, predictions, pad):
 # Write out 3d matrix of [0 - 1] predictions for each cell.
 def writePrediction(path, key, prediction):
     data = {}
-    data[key] = prediction
+    data[key] = prediction.astype(np.float16)
     scipy.io.savemat(path, data)
     print ("Saved to " + path)
 

@@ -16,22 +16,21 @@ import cnn
 import files
 import util
 
-CNN_FUNC = cnn.runOne
-SCAN_IDS = ['002'] #, '019', '022', '023', '034', '056', '058', '066', '082']
-METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
+ALL_FEAT = False
+SCAN_ID = '002'
 
-def trainOffAllVolumes(allFeat):
+
+def runExperiment(allFeat, scanID):
   classifier.ONE_FEAT_NAME = None
   opt = ['--flipx', '--flipy', '--flipz', '--trans']
   if allFeat:
     opt.append('--features')
   classifier.initOptions(opt)
+  
+  netPath = "paperCode/results/%s/network.ckpt" % ("allNet" if allFeat else "rawNet")
+  outPath = "paperCode/results/volumes/%s-CNN.mat" % scanID
 
-  savePath = "paperCode/results/%s/network.ckpt" % ("allNet" if allFeat else "rawNet")
-  scanIgnore = SCAN_IDS[0] # Need to test against something - ignore results though
-
-  classifier.brainsToBrain(SCAN_IDS, scanIgnore, CNN_FUNC, calcScore=True, writeVolume=False, savePath=savePath)
+  cnn.volumeFromSavedNet(netPath, scanID, outPath)
 
 if __name__ == '__main__':
-  trainOffAllVolumes(False)
-  #trainOffAllVolumes(True)
+  runExperiment(ALL_FEAT, SCAN_ID)
