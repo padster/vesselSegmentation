@@ -34,7 +34,7 @@ ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 LEARNING_RATE = 0.0003 # 0.001 # 0.03
 DROPOUT_RATE = 0.65 #.5
 BASE_BATCH = 5
-N_EPOCHS = 7
+N_EPOCHS = 5
 
 BATCH_SIZE = BASE_BATCH * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
 
@@ -284,7 +284,7 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
                 batchY = testY[itr*batchSize: (itr+1)*batchSize]
                 _scores = sess.run(scores, feed_dict={
                     xInput: batchX,
-                    yInput: util.oneshotY(batchY), 
+                    yInput: util.oneshotY(batchY),
                     isTraining: False
                 })
                 testProbs.extend(np.array(_scores)[:, 1].tolist())
