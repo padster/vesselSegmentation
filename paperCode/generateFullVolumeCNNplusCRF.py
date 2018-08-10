@@ -26,9 +26,10 @@ def runExperiment(allFeat, scanID):
   if allFeat:
     opt.append('--features')
   classifier.initOptions(opt)
-  
-  netPath = "paperCode/results/%s/network.ckpt" % ("allNet" if allFeat else "rawNet")
-  outPath = "paperCode/results/volumes/%s-CNN.mat" % scanID
+
+  sub = ("allNet" if allFeat else "rawNet")
+  netPath = "paperCode/results/%s/network.ckpt" % (sub)
+  outPath = "paperCode/results/%s/volumes/%s-CNN.mat" % (sub, scanID)
 
   cnn.volumeFromSavedNet(netPath, scanID, outPath)
 
