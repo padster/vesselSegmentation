@@ -306,7 +306,7 @@ def volumeFromSavedNet(netPath, scanID, resultPath):
     tf.reset_default_graph()
 
     print ("Using network %s to generate volume %s" % (netPath, scanID))
-    volume, _, _ = files.loadAllInputsUpdated(scanID, classifier.ALL_FEAT, classifier.MORE_FEAT, oneFeat=classifier.ONE_FEAT_NAME)
+    volume = files.loadAllInputsUpdated(scanID, classifier.ALL_FEAT, classifier.MORE_FEAT, oneFeat=classifier.ONE_FEAT_NAME, noTrain=True)
 
     buildFunc = None
     if classifier.SIZE == 7:

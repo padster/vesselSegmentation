@@ -11,7 +11,7 @@ def gauss( x, c1, mu1, sigma1 ):
   return c1 * np.exp( -(x - mu1)**2.0 / (2.0 * sigma1**2.0) )
 
 def rayleigh( x, c1, sigma1 ):
-  return c1 * x * np.exp( - x**2.0 / (2.0 * sigma1**2.0) ) 
+  return c1 * x * np.exp( - x**2.0 / (2.0 * sigma1**2.0) )
 
 # https://stackoverflow.com/questions/33178790/how-to-fit-a-double-gaussian-distribution-in-python
 def multiDistribution( x, params ):
@@ -19,7 +19,7 @@ def multiDistribution( x, params ):
   return rayleigh(x, c1, sigma1) + \
     gauss(x, c2, mu2, sigma2) + \
     gauss(x, c3, mu3, sigma3) + \
-    gauss(x, c4, mu4, sigma4) 
+    gauss(x, c4, mu4, sigma4)
 
 
 
@@ -92,10 +92,10 @@ def normalizeHistogram(scanID, newPeak=0.125, plot=False):
 
   print ("TODO")
   """
-  # Case 1: 
+  # Case 1:
   idA, idB, idC = (data <= p1), np.logical_and(p1 < data, data <= p2), (p2 < data)
   data[idA] =     0 + (data[idA] -  0) * (newP1 -     0) / (p1 -  0) #  0 ->     0, p1 -> newP1
-  data[idB] = newP1 + (data[idB] - p1) * (newP2 - newP1) / (p2 - p1) # p1 -> newP1, p2 -> newP2 
+  data[idB] = newP1 + (data[idB] - p1) * (newP2 - newP1) / (p2 - p1) # p1 -> newP1, p2 -> newP2
   data[idC] = newP2 + (data[idC] - p2) * (    1 - newP2) / ( 1 - p2) # p2 -> newP2,  1 ->     1
   q1, q2 = calculateFirstPeaks(data)
   print ('Normalized  %s: Peaks now %.3f -> %.3f' % (scanID, q1, q2))
@@ -113,7 +113,7 @@ def normalizeHistogram(scanID, newPeak=0.125, plot=False):
 
 def main():
   # printHistogramPeaks()
-  normalizeHistogram('082', plot=False)
+  normalizeHistogram('088', plot=False)
 
 if __name__ == '__main__':
   main()
