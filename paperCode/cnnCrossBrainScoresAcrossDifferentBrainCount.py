@@ -10,11 +10,15 @@ import random
 import classifier
 import cnn
 
+RUN_COUNT = 5
+BRAIN_COUNT = 3
+ALL_FEATURES = True
+
+
 CNN_FUNC = cnn.runOne
 
 SCAN_IDS = ['002', '019', '022', '023', '034', '056', '058', '066', '082']
 METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
-
 
 def runClassifier(trainBrains, testBrain):
   return classifier.brainsToBrain(trainBrains, testBrain, CNN_FUNC, calcScore=True, writeVolume=False, savePath=None)
@@ -59,6 +63,5 @@ def runExperiment(runID, brainCount, allFeat):
 
 
 if __name__ == '__main__':
-  RUN_NUMBER = 0
-  BRAIN_COUNT = 3
-  runExperiment(0, BRAIN_COUNT, True)
+  for i in range(RUN_COUNT):
+    runExperiment(i, BRAIN_COUNT, ALL_FEATURES)
