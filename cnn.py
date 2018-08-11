@@ -199,7 +199,7 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
         start_time = datetime.datetime.now()
         sess.run(tf.global_variables_initializer())
 
-        iterations = int(len(trainY)/batchSize) + 1
+        iterations = int(math.ceil(len(trainY)/batchSize))
         # run epochs
         for epoch in range(epochs):
             start_time_epoch = datetime.datetime.now()
