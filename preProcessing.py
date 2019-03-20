@@ -22,8 +22,6 @@ def multiDistribution( x, params ):
     gauss(x, c4, mu4, sigma4)
 
 
-
-
 BINS = 400
 def calculateVesselPeak(data, plot=False, scanID=None):
   ys, xs = np.histogram(data.flatten(), bins=BINS, normed=True)
@@ -74,13 +72,19 @@ def calculateVesselPeak(data, plot=False, scanID=None):
 082 : 0.102 -> 0.013
 084 : 0.010 -> 0.056
 """
-def printHistogramPeaks():
-  scanIDs = ['002', '019', '022', '023', '034', '056', '058', '066', '082', '084']
+def printHistogramPeaks(useFsFile=False, plot=False):
+  #scanIDs = ['002', '019', '022', '023', '034', '056', '058', '066', '082', '084'] # First batch
+  scanIDs = ['017', '027', '035', '046', '064', '077'] # Second batch
   for scanID in scanIDs:
-    mraPath = "/%s/Normal%s-MRA-FS.mat" % (scanID, scanID)
-    data, _, _, _ = files.loadFeat(files.BASE_PATH + mraPath)
-    p1, p2 = calculateFirstPeaks(data)
-    print ('%s : %.3f -> %.3f' % (scanID, p1, p2))
+    if useFsFile:
+      mraPath = "/%s/Normal%s-MRA-FS.mat" % (scanID, scanID)
+      data, _, _, _ = files.loadFeat(files.BASE_PATH + mraPath)
+    else:
+      mraPath = "/%s/Normal%s-MRA.mat" % (scanID, scanID)
+      data = files.loadMRA(files.BASE_PATH + mraPath)
+      data = data / np.max(data) # Need to normalize
+    vPeak = calculateVesselPeak(data, plot=plot, scanID=scanID)
+    print ('%s : peak at %.3f' % (scanID, vPeak))
 
 def normalizeHistogram(scanID, newPeak=0.125, plot=False):
   mraPath = "/%s/Normal%s-MRA-FS.mat" % (scanID, scanID)
@@ -112,8 +116,9 @@ def normalizeHistogram(scanID, newPeak=0.125, plot=False):
 
 
 def main():
-  # printHistogramPeaks()
-  normalizeHistogram('088', plot=False)
+  printHistogramPeaks(plot=False)
+  # normalizeHistogram('088', plot=False)
+  # normalizeHistogram('999', plot=False)
 
 if __name__ == '__main__':
   main()

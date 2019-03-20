@@ -295,9 +295,9 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
             print ("Model saved to %s" % (savePath))
 
     if testProbs is not None:
-        return costs, corrs, util.genScores(testY, testProbs)
+        return costs, corrs, util.genScores(testY, testProbs), testProbs
     else:
-        return costs, corrs, volumeResult
+        return costs, corrs, volumeResult, None
 
 
 # TODO: Migrate to classifier

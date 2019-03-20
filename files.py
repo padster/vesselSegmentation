@@ -14,8 +14,8 @@ USE_PREPROC = True
 ###
 
 
-# BASE_PATH = "D:/projects/vessels/inputs"
-BASE_PATH = "/home/ubuntu/data/inputs"
+BASE_PATH = "D:/projects/vessels/inputs"
+# BASE_PATH = "/home/ubuntu/data/inputs"
 # BASE_PATH = "data/inputs"
 
 # HACK: Set by caller
@@ -70,11 +70,16 @@ def convertToInputs(data, labels, pad, flipX, flipY, flipZ):
     yR = [1, -1] if flipY else [1]
     zR = [1, -1] if flipZ else [1]
 
+    s = data.shape
+    paddedData = np.zeros((s[0] + 2 * pad, s[1] + 2 * pad, s[2] + 2 * pad, s[3]))
+    paddedData[pad:pad+s[0], pad:pad+s[1], pad:pad+s[2], :] = data
+
     Xs, Ys = [], []
     for row in range(rows):
         x, y, z, label = labels[row]
         x, y, z = x - 1, y - 1, z - 1
-        xCells = data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :]
+        # xCells = data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :]
+        xCells = paddedData[x:x+2*pad+1, y:y+2*pad+1, z:z+2*pad+1, :]
         if xCells.shape == (sz, sz, sz, data.shape[3]):
             for xr in xR:
                 for yr in yR:
@@ -82,7 +87,7 @@ def convertToInputs(data, labels, pad, flipX, flipY, flipZ):
                         Xs.append(xCells[::xr, ::yr, ::zr])
                         Ys.append(label)
         else:
-            # print("Skipping boundary point %s" % str(labels[row]))
+            print("Skipping boundary point %s" % str(labels[row]))
             pass
     return np.array(Xs), np.array(Ys)
 
@@ -90,7 +95,7 @@ def loadAllInputsUpdated(scanID, allFeatures, moreFeatures, oneFeat=None, noTrai
     # fsPath = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
     fsPath     = "%s/%s/Normal%s-MRA-FS.mat" % (BASE_PATH, scanID, scanID)
     lTrainPath = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (BASE_PATH, scanID, scanID)
-    lTestPath  = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (BASE_PATH, scanID, scanID)
+    lTestPath  = "%s/%s/Normal%s-MRA_annotationAll_testing_C.mat" % (BASE_PATH, scanID, scanID)
 
     if USE_PREPROC:
         if scanID == '084':

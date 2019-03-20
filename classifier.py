@@ -62,7 +62,7 @@ def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False, savePath=
     trainX, trainY = files.convertToInputs(data, labelsTrain, PAD, FLIP_X, FLIP_Y, FLIP_Z)
     testX,   testY = files.convertToInputs(data,  labelsTest, PAD, False, False, False)
     print ("%d train samples, %d test" % (len(trainX), len(testX)))
-    _, _, scores = runOneFunc(trainX, trainY, testX, testY, scanID, savePath)
+    _, _, scores, _ = runOneFunc(trainX, trainY, testX, testY, scanID, savePath)
     print ("  Results\n  -------\n" + util.formatScores(scores))
 
   if writeVolume:
@@ -73,6 +73,7 @@ def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False, savePath=
 def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):
     trainX, trainY = None, None
     print ("Loading points from scans: %s" % (str(fromIDs)))
+    #allX, allY = [], []
     for fromID in fromIDs:
         print ("  ... loading %s" % (fromID))
         fromX, fromY = files.convertScanToXY(fromID, ALL_FEAT, MORE_FEAT, PAD, FLIP_X, FLIP_Y, FLIP_Z, merge=True, oneFeat=ONE_FEAT_NAME)
@@ -81,20 +82,23 @@ def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, 
         else:
             trainX = np.vstack((trainX, fromX))
             trainY = np.append( trainY, fromY )
+        #allX.append(fromX)
+        #allY.append(fromY)
         gc.collect()
+    #trainX = np.vstack(tuple(allX))
+    #trainY = np.vstack(tuple(allY))
     print ("Train X / Y shapes = ", trainX.shape, trainY.shape)
-
     toReturn = None
     if calcScore:
         toX, toY = files.convertScanToXY(toID, ALL_FEAT, MORE_FEAT, PAD, False, False, False, merge=True, oneFeat=ONE_FEAT_NAME)
         print ("Test X / Y shapes = ", toX.shape, toY.shape)
-        _, _, scores = runOneFunc(trainX, trainY, toX, toY, toID, savePath)
+        _, _, scores, _ = runOneFunc(trainX, trainY, toX, toY, toID, savePath)
         print ("  Results\n  -------\n" + util.formatScores(scores))
         print ("\n\n\n")
         toReturn = scores
 
     if writeVolume:
         data, _, _ = files.loadAllInputsUpdated(toID, ALL_FEAT, MORE_FEAT, oneFeat=ONE_FEAT_NAME)
-        _, _, volume = runOneFunc(trainX, trainY, data, None, toID, savePath)
+        _, _, volume, _ = runOneFunc(trainX, trainY, data, None, toID, savePath)
         toReturn = volume
     return toReturn
