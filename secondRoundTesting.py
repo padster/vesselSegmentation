@@ -16,8 +16,17 @@ ALL_FEATURES = False
 
 CNN_FUNC = cnn.runOne
 
-ROUND_1_SCAN_IDS = ['002', '019', '022', '023', '034'] #, '056', '058', '066', '082']
-ROUND_2_SCAN_IDS = ['017', '027', '035', '046', '064', '077']
+OLD_IDS = ['002', '019', '022', '023', '034', '056', '058', '066', '082']
+NEW_IDS = ['017', '027', '035', '046', '064', '077']
+
+# Intial - train 9, test 1
+# TRAIN_IDS = OLD_IDS
+# TEST_IDS = NEW_IDS[0:1]
+
+# New - train 14, test 1
+TRAIN_IDS = OLD_IDS + NEW_IDS[1:]
+TEST_IDS = NEW_IDS[0:1]
+
 METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
 
 def runClassifier(trainBrains, testBrain):
@@ -46,14 +55,14 @@ def generateResults(trainIDs, testIDs):
 
 def runNewRoundExperiment():
   random.seed(5)
-  random.shuffle(ROUND_1_SCAN_IDS)
-  random.shuffle(ROUND_2_SCAN_IDS)
+  random.shuffle(TRAIN_IDS)
+  random.shuffle(TEST_IDS)
 
   classifier.ONE_FEAT_NAME = None
-  opt = ['--flipx', '--flipy', '--flipz', '--trans', '--features']
+  opt = ['--flipx', '--flipy', '--flipz', '--flipxy', '--trans', '--features']
   classifier.initOptions(opt)
 
-  generateResults(ROUND_1_SCAN_IDS, ROUND_2_SCAN_IDS)
+  generateResults(TRAIN_IDS, TEST_IDS)
 
 
 if __name__ == '__main__':

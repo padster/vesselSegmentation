@@ -3,6 +3,8 @@ import datetime
 from sklearn.metrics import roc_auc_score
 from scipy import ndimage
 
+from model import SubVolume, extractSubVolume
+
 def randomShuffle(X, Y):
 	assert X.shape[0] == Y.shape[0]
 	p = np.random.permutation(X.shape[0])
@@ -16,15 +18,16 @@ def flatCube(data):
 	s = data.shape
 	return data.reshape((s[0], s[1] * s[2] * s[3]))
 
-# R x (xyz) => 8R x (xyz)
-def allRotations(data):
-	allData = []
-	for i in range(data.shape[0]):
-		for xR in [1, -1]:
-			for yR in [1, -1]:
-				for zR in [1, -1]:
-					allData.append(data[i, ::xR, ::yR, ::zR])
-	return np.array(allData)
+# R x (xyz) => 16R x (xyz)
+def allRotations(subvolumes):
+	allSV = []
+	for sv in subvolumes:
+		for fXY in [False, True]:
+			for rX in [False, True]:
+				for rY in [False, True]:
+					for rZ in [False, True]:
+						allSV.append(SubVolume(sv.s, sv.x, sv.y, sv.z, sv.p, fXY, rX, rY, rZ))
+	return allSV
 
 def combinePredictions(predictions):
 	# TODO - better ways?
@@ -32,6 +35,24 @@ def combinePredictions(predictions):
 	# pi = np.prod(predictions, axis=1)
 	# mpi = np.prod(1 - predictions, axis=1)
 	# return pi / (pi + mpi)
+
+
+def subVolumesToTensor(subvolumes):
+	result = []
+	for sv in subvolumes:
+		data = extractSubVolume(sv)
+		if data.shape[0] == 0 or data.shape[1] == 0 or data.shape[2] == 0:
+			print ("BROKEN")
+			print (sv)
+		else:
+			result.append(data)
+	return np.array(result)
+
+def padVolume(volume, pad):
+	s = volume.shape
+	paddedVolume = np.zeros((s[0] + 2 * pad, s[1] + 2 * pad, s[2] + 2 * pad, s[3]))
+	paddedVolume[pad:pad+s[0], pad:pad+s[1], pad:pad+s[2], :] = volume
+	return paddedVolume
 
 def oneshotY(y):
 	return np.column_stack((1 - y, y))

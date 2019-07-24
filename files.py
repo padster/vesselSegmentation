@@ -6,6 +6,8 @@ from tifffile import TiffFile, imsave
 
 import util
 
+from model import PADDED_VOLUMES, SubVolume, transformParamsToID, SubVolumeFromTransformID
+
 CAST_TYPES = True
 USE_PREPROC = True
 
@@ -61,14 +63,27 @@ def loadLabels(path='data/Normal001-MRA-labels.mat'):
     return loadMat(path, 'coordTable')
 
 # Given [X Y Z 0/1-label], and intensity, pick out cubes (of size CUBE_SZ) around the centres.
-def convertToInputs(data, labels, pad, flipX, flipY, flipZ):
+def convertToInputs(scanID, data, labels, pad, flipX, flipY, flipZ, flipXY, oneTransID=None):
     rows, cols = labels.shape
     assert cols == 4
     sz = 2 * pad + 1
 
-    xR = [1, -1] if flipX else [1]
-    yR = [1, -1] if flipY else [1]
-    zR = [1, -1] if flipZ else [1]
+    transforms = []
+    if oneTransID is None:
+        # Load all transforms based off flip params:
+        # TODO - pull outside this method?
+        xR  = [False, True] if flipX  else [False]
+        yR  = [False, True] if flipY  else [False]
+        zR  = [False, True] if flipZ  else [False]
+        xyF = [False, True] if flipXY else [False]
+        for xr in xR:
+            for yr in yR:
+                for zr in zR:
+                    for xyf in xyF:
+                        transforms.append(transformParamsToID(xyf, xr, yr, zr))
+    else:
+        # Only load one transform:
+        transforms = [oneTransID]
 
     s = data.shape
     paddedData = np.zeros((s[0] + 2 * pad, s[1] + 2 * pad, s[2] + 2 * pad, s[3]))
@@ -81,17 +96,15 @@ def convertToInputs(data, labels, pad, flipX, flipY, flipZ):
         # xCells = data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :]
         xCells = paddedData[x:x+2*pad+1, y:y+2*pad+1, z:z+2*pad+1, :]
         if xCells.shape == (sz, sz, sz, data.shape[3]):
-            for xr in xR:
-                for yr in yR:
-                    for zr in zR:
-                        Xs.append(xCells[::xr, ::yr, ::zr])
-                        Ys.append(label)
+            for t in transforms:
+                Xs.append(SubVolumeFromTransformID(scanID, x, y, z, pad, t))
+                Ys.append(label)
         else:
             print("Skipping boundary point %s" % str(labels[row]))
             pass
-    return np.array(Xs), np.array(Ys)
+    return Xs, np.array(Ys)
 
-def loadAllInputsUpdated(scanID, allFeatures, moreFeatures, oneFeat=None, noTrain=False):
+def loadAllInputsUpdated(scanID, pad, allFeatures, moreFeatures, oneFeat=None, noTrain=False):
     # fsPath = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
     fsPath     = "%s/%s/Normal%s-MRA-FS.mat" % (BASE_PATH, scanID, scanID)
     lTrainPath = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (BASE_PATH, scanID, scanID)
@@ -132,23 +145,30 @@ def loadAllInputsUpdated(scanID, allFeatures, moreFeatures, oneFeat=None, noTrai
     data = np.stack(allStacks, axis=-1)
     print ("Input data loaded, shape = %s" % (str(data.shape)))
 
+    PADDED_VOLUMES[scanID] = util.padVolume(data, pad)
+
     if noTrain:
         return data
     else:
-        return data, loadLabels(lTrainPath), loadLabels(lTestPath)
+        lTrain = loadLabels(lTrainPath)
+        lTest = loadLabels(lTestPath)
+        print ("Labels: %s train, %s test" % (str(lTrain.shape), str(lTest.shape)))
+        return data, lTrain, lTest
 
-def convertScanToXY(scanID, allFeatures, moreFeatures, pad, flipX, flipY, flipZ, merge, oneFeat=None):
-    data, labelsTrain, labelsTest = loadAllInputsUpdated(scanID, allFeatures, moreFeatures, oneFeat)
-    if merge:
-        labels = np.vstack((labelsTrain, labelsTest))
-        return convertToInputs(data, labels, pad, flipX, flipY, flipZ)
-    else:
-        trainX, trainY = convertToInputs(data, labelsTrain, pad, flipX, flipY, flipZ)
-        testX, testY = convertToInputs(data, labelsTest, pad, flipX, flipY, flipZ)
-        return trainX, trainY, testX, testY
+def convertScanToXY(scanID, allFeatures, moreFeatures, pad, flipX, flipY, flipZ, flipXY, merge=True, oneFeat=None, oneTransID=None):
+    assert merge == True
+    data, labelsTrain, labelsTest = loadAllInputsUpdated(scanID, pad, allFeatures, moreFeatures, oneFeat)
+    labels = np.vstack((labelsTrain, labelsTest))
+    return convertToInputs(scanID, data, labels, pad, flipX, flipY, flipZ, flipXY, oneTransID=oneTransID)
+    # Unmerged version, no longer needed - eventually to be removed
+    # trainX, trainY = convertToInputs(scanID, data, labelsTrain, pad, flipX, flipY, flipZ, flipXY)
+    # testX, testY = convertToInputs(scanID, data, labelsTest, pad, flipX, flipY, flipZ, flipXY)
+    # return trainX, trainY, testX, testY
+
 
 # Given full volume, split up into a subset of the cubes the same size as the inputs
 def convertVolumeStack(data, pad, x, y):
+    raise Exception("Need to convert this to the new SubVolume model")
     nX, nY, nZ, nChan = data.shape
 
     Xs = []

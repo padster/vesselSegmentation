@@ -1,10 +1,6 @@
 *.pyc
 *.pem
 *.png
+*.csv
 
-data/**/*-FS.mat
-data/**/*-RF.mat
-data/**/*-CNN.mat
-data/**/*-CNN-trans.mat
-data/**/*.ckpt.*
-data/**/checkpoint
+data/**

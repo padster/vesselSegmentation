@@ -42,8 +42,8 @@ def kInit(seed):
     return tf.glorot_normal_initializer(seed=seed)
 
 def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
-    # nFilt = [64, 128, 128]
     nFilt = [64, 64, 64]
+    # nFilt = [64, 128, 128]
     # nFilt = [32, 16, 16]
     # nFilt = [32, 32, 32]
     xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, classifier.N_FEAT])
@@ -158,20 +158,42 @@ def buildNetwork11(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RA
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
     return xInput, yInput, isTraining, trainOp, cost, numCorrect, predictedProbs
 
+def _getNetworkFunc():
+    if classifier.SIZE == 7:
+        return buildNetwork7
+    elif classifier.SIZE == 9:
+        return buildNetwork9
+    elif classifier.SIZE == 11:
+        return buildNetwork11
+    else:
+        print ("No network for size %d" % (classifier.SIZE))
+        raise 0
+
 
 def predict(sess, scores, xInput, isTraining, data):
     if classifier.PREDICT_TRANSFORM:
+        nTransforms = 16  # model.N_TRANSFORMS
         data = util.allRotations(data)
-        preds = sess.run(scores, feed_dict={xInput: data, isTraining: False})
-        preds = preds[:, 1].reshape((-1, 8))
+        preds = sess.run(scores, feed_dict={
+            xInput: util.subVolumesToTensor(data), 
+            isTraining: False
+        })
+        preds = preds[:, 1].reshape((-1, nTransforms))
         return util.combinePredictions(preds)
     else:
-        preds = sess.run(scores, feed_dict={xInput: data, isTraining: False})
+        preds = sess.run(scores, feed_dict={
+            xInput: util.subVolumesToTensor(data), 
+            isTraining: False
+        })
         return preds[:, 1].tolist()
 
 
 # As an example, run CNN on these given labels and test data, return the score.
 def runOne(trainX, trainY, testX, testY, scanID, savePath):
+    # HACK
+    trainX = np.array(trainX)
+    testX = np.array(testX)
+
     epochs = N_EPOCHS
     batchSize = BATCH_SIZE
 
@@ -180,17 +202,8 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
     testProbs = None
 
     tf.reset_default_graph()
-    buildFunc = None
-    if classifier.SIZE == 7:
-        buildFunc = buildNetwork7
-    elif classifier.SIZE == 9:
-        buildFunc = buildNetwork9
-    elif classifier.SIZE == 11:
-        buildFunc = buildNetwork11
-    else:
-        print ("No network for size %d" % (classifier.SIZE))
-        raise 0
-    xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = buildFunc()
+
+    xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = (_getNetworkFunc())()
 
     saver = None if savePath is None else tf.train.Saver()
 
@@ -205,18 +218,15 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
             start_time_epoch = datetime.datetime.now()
             print('Scan %s, Epoch %d started' % (scanID, epoch))
             gc.collect()
-            # trainX, trainY = util.randomShuffle(trainX, trainY)
-            order = np.random.permutation(trainX.shape[0])
+            order = np.random.permutation(len(trainX))
 
             # mini batch for trianing set:
             totalCost, totalCorr = 0.0, 0
             for itr in tqdm(range(iterations)):
                 batchX = trainX[order[itr*batchSize: (itr+1)*batchSize]]
                 batchY = trainY[order[itr*batchSize: (itr+1)*batchSize]]
-                # batchX = trainX[itr*batchSize: (itr+1)*batchSize]
-                # batchY = trainY[itr*batchSize: (itr+1)*batchSize]
                 _trainOp, _cost, _corr = sess.run([trainOp, cost, numCorrect], feed_dict={
-                    xInput: batchX,
+                    xInput: util.subVolumesToTensor(batchX),
                     yInput: util.oneshotY(batchY),
                     isTraining: True
                 })
@@ -230,15 +240,12 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
             # Run against test set:
             if runTest:
                 # print ("\n=======\nPart #2: Running against test voxels.")
-                # testX, testY = util.randomShuffle(testX, testY)
                 order = np.random.permutation(testX.shape[0])
                 totalCorr = 0
                 itrs = int(math.ceil(len(testY)/batchSize))
                 for itr in range(itrs):
                     batchX = testX[order[itr*batchSize: (itr+1)*batchSize]]
                     batchY = testY[order[itr*batchSize: (itr+1)*batchSize]]
-                    # batchX = testX[itr*batchSize: (itr+1)*batchSize]
-                    # batchY = testY[itr*batchSize: (itr+1)*batchSize]
                     predictions = predict(sess, scores, xInput, isTraining, batchX)
                     totalCorr += np.sum((np.array(predictions) > 0.5) == (np.array(batchY) > 0.5))
                 end_time_epoch = datetime.datetime.now()
@@ -283,7 +290,7 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
                 batchX = testX[itr*batchSize: (itr+1)*batchSize]
                 batchY = testY[itr*batchSize: (itr+1)*batchSize]
                 _scores = sess.run(scores, feed_dict={
-                    xInput: batchX,
+                    xInput: util.subVolumesToTensor(batchX),
                     yInput: util.oneshotY(batchY),
                     isTraining: False
                 })
@@ -308,15 +315,8 @@ def volumeFromSavedNet(netPath, scanID, resultPath):
     print ("Using network %s to generate volume %s" % (netPath, scanID))
     volume = files.loadAllInputsUpdated(scanID, classifier.ALL_FEAT, classifier.MORE_FEAT, oneFeat=classifier.ONE_FEAT_NAME, noTrain=True)
 
-    buildFunc = None
-    if classifier.SIZE == 7:
-        buildFunc = buildNetwork7
-    elif classifier.SIZE == 9:
-        buildFunc = buildNetwork9
-    elif classifier.SIZE == 11:
-        buildFunc = buildNetwork11
 
-    xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = buildFunc()
+    xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = (_getNetworkFunc())()
     saver = tf.train.Saver()
 
     with tf.Session() as sess:

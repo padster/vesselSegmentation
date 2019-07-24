@@ -10,11 +10,11 @@ PAD = (SIZE-1)//2
 
 import sys
 
-N_FEAT, RUN_AWS, ALL_FEAT, MORE_FEAT, SAVE_NET, LOAD_NET, FLIP_X, FLIP_Y, FLIP_Z, PREDICT_TRANSFORM, CNN_FEAT, ONE_FEAT, ONE_FEAT_NAME = \
-    None, None, None, None, None, None, None, None, None, None, None, None, None,
+N_FEAT, RUN_AWS, ALL_FEAT, MORE_FEAT, SAVE_NET, LOAD_NET, FLIP_X, FLIP_Y, FLIP_Z, FLIP_XY, PREDICT_TRANSFORM, CNN_FEAT, ONE_FEAT, ONE_FEAT_NAME, ONE_TRANS_ID = \
+    None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
 def initOptions(argv):
-    global N_FEAT, RUN_AWS, ALL_FEAT, MORE_FEAT, SAVE_NET, LOAD_NET, FLIP_X, FLIP_Y, FLIP_Z, PREDICT_TRANSFORM, CNN_FEAT, ONE_FEAT, ONE_FEAT_NAME
+    global N_FEAT, RUN_AWS, ALL_FEAT, MORE_FEAT, SAVE_NET, LOAD_NET, FLIP_X, FLIP_Y, FLIP_Z, FLIP_XY, PREDICT_TRANSFORM, CNN_FEAT, ONE_FEAT, ONE_FEAT_NAME, ONE_TRANS_ID
 
     RUN_AWS = "--local" not in argv
     ALL_FEAT = "--features" in argv
@@ -24,6 +24,7 @@ def initOptions(argv):
     FLIP_X = "--flipx" in argv
     FLIP_Y = "--flipy" in argv
     FLIP_Z = "--flipz" in argv
+    FLIP_XY = "--flipxy" in argv
     PREDICT_TRANSFORM = "--trans" in argv
     CNN_FEAT = "--cnnfeat" in argv
     files.CNN_FEAT = CNN_FEAT # HACK
@@ -39,7 +40,18 @@ def initOptions(argv):
     if ONE_FEAT:
         N_FEAT += 1
 
-    print ("====\nTarget: %s\n# Features: %d\nVolume: %dx%dx%d\nFeatures: %s\n%s%sFlip X: %s\nFlip Y: %s\nFlip Z: %s\n%s%s ====\n" % (
+    print ("""
+====
+Target: %s
+# Features: %d
+Volume: %dx%dx%d
+Features: %s
+%s%sFlip X: %s
+Flip Y: %s
+Flip Z: %s
+Flip XY: %s
+%s%s%s====
+""" % (
         "GPU" if RUN_AWS else "Local",
         N_FEAT,
         SIZE, SIZE, SIZE,
@@ -49,49 +61,47 @@ def initOptions(argv):
         str(FLIP_X),
         str(FLIP_Y),
         str(FLIP_Z),
+        str(FLIP_XY),
         "Predict with transform\n" if PREDICT_TRANSFORM else "",
         ("With only feature %s\n" % (ONE_FEAT_NAME)) if ONE_FEAT_NAME is not None else "",
+        ("With only transform %s\n" % (ONE_TRANS_ID)) if ONE_TRANS_ID is not None else "",
     ))
-
 
 
 def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):
   data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT, MORE_FEAT, oneFeat=ONE_FEAT_NAME)
 
   if calcScore:
-    trainX, trainY = files.convertToInputs(data, labelsTrain, PAD, FLIP_X, FLIP_Y, FLIP_Z)
-    testX,   testY = files.convertToInputs(data,  labelsTest, PAD, False, False, False)
+    trainX, trainY = files.convertToInputs(scanID, data, labelsTrain, PAD, FLIP_X, FLIP_Y, FLIP_Z)
+    testX,   testY = files.convertToInputs(scanID, data,  labelsTest, PAD, False, False, False)
     print ("%d train samples, %d test" % (len(trainX), len(testX)))
     _, _, scores, _ = runOneFunc(trainX, trainY, testX, testY, scanID, savePath)
     print ("  Results\n  -------\n" + util.formatScores(scores))
 
   if writeVolume:
     labels = np.vstack((labelsTrain, labelsTest))
-    trainX, trainY = files.convertToInputs(data, labels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
+    trainX, trainY = files.convertToInputs(scanID, data, labels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
     runOneFunc(trainX, trainY, data, None, scanID, savePath)
+
 
 def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):
     trainX, trainY = None, None
     print ("Loading points from scans: %s" % (str(fromIDs)))
-    #allX, allY = [], []
     for fromID in fromIDs:
         print ("  ... loading %s" % (fromID))
-        fromX, fromY = files.convertScanToXY(fromID, ALL_FEAT, MORE_FEAT, PAD, FLIP_X, FLIP_Y, FLIP_Z, merge=True, oneFeat=ONE_FEAT_NAME)
+        fromX, fromY = files.convertScanToXY(fromID, ALL_FEAT, MORE_FEAT, PAD, FLIP_X, FLIP_Y, FLIP_Z, FLIP_XY, merge=True, oneFeat=ONE_FEAT_NAME, oneTransID=ONE_TRANS_ID)
         if trainX is None:
             trainX, trainY = fromX, fromY
         else:
-            trainX = np.vstack((trainX, fromX))
+            trainX.extend(fromX)
             trainY = np.append( trainY, fromY )
-        #allX.append(fromX)
-        #allY.append(fromY)
         gc.collect()
-    #trainX = np.vstack(tuple(allX))
-    #trainY = np.vstack(tuple(allY))
-    print ("Train X / Y shapes = ", trainX.shape, trainY.shape)
+
+    print ("Train X / Y shapes = ", len(trainX), trainY.shape)
     toReturn = None
     if calcScore:
-        toX, toY = files.convertScanToXY(toID, ALL_FEAT, MORE_FEAT, PAD, False, False, False, merge=True, oneFeat=ONE_FEAT_NAME)
-        print ("Test X / Y shapes = ", toX.shape, toY.shape)
+        toX, toY = files.convertScanToXY(toID, ALL_FEAT, MORE_FEAT, PAD, False, False, False, False, merge=True, oneFeat=ONE_FEAT_NAME, oneTransID=ONE_TRANS_ID)
+        print ("Test X / Y shapes = ", len(toX), toY.shape)
         _, _, scores, _ = runOneFunc(trainX, trainY, toX, toY, toID, savePath)
         print ("  Results\n  -------\n" + util.formatScores(scores))
         print ("\n\n\n")
