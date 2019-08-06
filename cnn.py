@@ -158,7 +158,16 @@ def buildNetwork11(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RA
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
     return xInput, yInput, isTraining, trainOp, cost, numCorrect, predictedProbs
 
+customNetworkFunc = None
+def overrideNetwork(networkFunc):
+    global customNetworkFunc
+    customNetworkFunc = networkFunc
+
+
 def _getNetworkFunc():
+    if customNetworkFunc is not None:
+        return customNetworkFunc()
+
     if classifier.SIZE == 7:
         return buildNetwork7
     elif classifier.SIZE == 9:

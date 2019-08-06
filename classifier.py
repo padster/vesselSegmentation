@@ -69,11 +69,11 @@ Flip XY: %s
 
 
 def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):
-  data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, ALL_FEAT, MORE_FEAT, oneFeat=ONE_FEAT_NAME)
+  data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, PAD, ALL_FEAT, MORE_FEAT, oneFeat=ONE_FEAT_NAME)
 
   if calcScore:
-    trainX, trainY = files.convertToInputs(scanID, data, labelsTrain, PAD, FLIP_X, FLIP_Y, FLIP_Z)
-    testX,   testY = files.convertToInputs(scanID, data,  labelsTest, PAD, False, False, False)
+    trainX, trainY = files.convertToInputs(scanID, data, labelsTrain, PAD, FLIP_X, FLIP_Y, FLIP_Z, FLIP_XY)
+    testX,   testY = files.convertToInputs(scanID, data,  labelsTest, PAD, False, False, False, FLIP_XY)
     print ("%d train samples, %d test" % (len(trainX), len(testX)))
     _, _, scores, _ = runOneFunc(trainX, trainY, testX, testY, scanID, savePath)
     print ("  Results\n  -------\n" + util.formatScores(scores))
@@ -108,7 +108,7 @@ def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, 
         toReturn = scores
 
     if writeVolume:
-        data, _, _ = files.loadAllInputsUpdated(toID, ALL_FEAT, MORE_FEAT, oneFeat=ONE_FEAT_NAME)
+        data, _, _ = files.loadAllInputsUpdated(toID, PAD, ALL_FEAT, MORE_FEAT, oneFeat=ONE_FEAT_NAME)
         _, _, volume, _ = runOneFunc(trainX, trainY, data, None, toID, savePath)
         toReturn = volume
     return toReturn
