@@ -16,7 +16,7 @@ USE_PREPROC = True
 ###
 
 
-BASE_PATH = "D:/projects/vessels/inputs"
+BASE_PATH = "H:/projects/vessels/inputs"
 # BASE_PATH = "/home/ubuntu/data/inputs"
 # BASE_PATH = "data/inputs"
 
