@@ -71,17 +71,21 @@ Flip XY: %s
 def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):
   data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, PAD, ALL_FEAT, MORE_FEAT, oneFeat=ONE_FEAT_NAME)
 
+  toReturn = None
   if calcScore:
     trainX, trainY = files.convertToInputs(scanID, data, labelsTrain, PAD, FLIP_X, FLIP_Y, FLIP_Z, FLIP_XY)
     testX,   testY = files.convertToInputs(scanID, data,  labelsTest, PAD, False, False, False, FLIP_XY)
     print ("%d train samples, %d test" % (len(trainX), len(testX)))
     _, _, scores, _ = runOneFunc(trainX, trainY, testX, testY, scanID, savePath)
     print ("  Results\n  -------\n" + util.formatScores(scores))
+    toReturn = scores
 
   if writeVolume:
     labels = np.vstack((labelsTrain, labelsTest))
     trainX, trainY = files.convertToInputs(scanID, data, labels, PAD, FLIP_X, FLIP_Y, FLIP_Z)
-    runOneFunc(trainX, trainY, data, None, scanID, savePath)
+    _, _, volume, _ = runOneFunc(trainX, trainY, data, None, scanID, savePath)
+    toReturn = volume
+  return toReturn
 
 
 def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):

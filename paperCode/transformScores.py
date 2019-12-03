@@ -39,36 +39,26 @@ def generateResults(scanIDs, experimentName):
   withMean = np.hstack((allValues, means))
 
   withMeanDF = pd.DataFrame(withMean, METRICS, scanIDs + ['Mean'])
-  withMeanDF.to_csv("paperCode/results/%s.csv" % experimentName)
+  withMeanDF.to_csv("paperCode/results/TRANSFORMS_%s.csv" % experimentName)
   return withMeanDF
 
-def runExperiment(allFeat, singleFeat, collector):
-  expName = "NO_FEATURES"
-  if allFeat:
-    expName = "ALL_FEATURES"
-  elif singleFeat is not None:
-    expName = "ONE_FEATURE_" + singleFeat
 
-  opt = ['--flipx', '--flipy', '--flipz', '--trans']
-  if allFeat:
-    opt.append('--features')
-    classifier.ONE_FEAT_NAME = None
-  elif singleFeat is not None:
-    opt.append('--onefeat')
-    classifier.ONE_FEAT_NAME = singleFeat
+def runExperiment(expName, transformsToUse, collector):
+  # All features
+  opt = ['--features'] + transformsToUse
   classifier.initOptions(opt)
 
   collector[expName] = generateResults(SCAN_IDS, expName)
+
 
 if __name__ == '__main__':
   random.shuffle(SCAN_IDS)
 
   collector = {}
-  runExperiment(False, None, collector)
-  runExperiment(False, 'EM', collector)
-  runExperiment(False, 'JV', collector)
-  runExperiment(False, 'PC', collector)
-  runExperiment(True, None, Collector)
+  #runExperiment('NONE', [], collector)
+  #runExperiment('FLIPXY', ['--flipx', '--flipy'], collector)
+  #runExperiment('FLIPZ', ['--flipz'], collector)
+  runExperiment('ALL', ['--flipx', '--flipy', '--flipz', '--flipxy', '--trans'], collector)
 
   for k, v in collector.items():
     print (k)
