@@ -4,3 +4,4 @@
 *.csv
 
 data/**
+paperCode/results/singleBrain.pkl
