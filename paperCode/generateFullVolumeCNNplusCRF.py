@@ -14,7 +14,7 @@ random.seed(0)
 import classifier
 import cnn
 import files
-import postProcessing
+#import postProcessing
 import util
 
 def generateFullVolumeCRF(allFeat, scanID):
@@ -33,19 +33,22 @@ def generateFullVolumeCRF(allFeat, scanID):
 
 def generateFullVolumeCNN(allFeat, scanID):
   classifier.ONE_FEAT_NAME = None
-  opt = ['--flipx', '--flipy', '--flipz', '--trans']
+  opt = ['--trans']
   if allFeat:
     opt.append('--features')
   classifier.initOptions(opt)
 
   sub = ("allNet" if allFeat else "rawNet")
   netPath = "paperCode/results/%s/network.ckpt" % (sub)
-  outPath = "paperCode/results/%s/volumes/%s-CNN.mat" % (sub, scanID)
 
-  cnn.volumeFromSavedNet(netPath, scanID, outPath)
+  xFr = 250
+  xTo = 300
+  outPath = "paperCode/results/%s/volumes/%s-CNN-%d-%d.mat" % (sub, scanID, xFr, xTo)
+
+  cnn.volumeFromSavedNet(netPath, scanID, outPath, xFr, xTo, useMask=True)
 
 
 if __name__ == '__main__':
-  generateFullVolumeCNN(True, '990')
+  generateFullVolumeCNN(True, '002')
 
   # generateFullVolumeCRF(True, '018')

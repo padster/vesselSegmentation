@@ -4,4 +4,8 @@
 *.csv
 
 data/**
-paperCode/results/singleBrain.pkl
+runs/**
+paperCode/results/**
+
+
+

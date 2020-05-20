@@ -12,6 +12,7 @@ pd.set_option('precision', 5)
 random.seed(0)
 
 import classifier
+import cnn
 import files
 import util
 
@@ -31,8 +32,26 @@ def annotationCounts():
   print (asDF)
 
 
+def paramsAndOps(allFeat=False, scanID='002'):
+  sub = ("allNet" if allFeat else "rawNet")
+  netPath = "paperCode/results/%s/network.ckpt" % (sub)
+
+  classifier.ONE_FEAT_NAME = None
+  opt = ['--trans']
+  #opt = []
+  if allFeat:
+    opt.append('--features')
+  classifier.initOptions(opt)
+
+  stats = cnn.calcStats(netPath, scanID)
+  print ("Stats:\n\t%d parameters\n\t%d flops per voxel" % (stats['params'], stats['flops']))
+
+
 
 if __name__ == '__main__':
   print ("Calculating stats for the paper...\n")
+  
+  #annotationCounts()
 
-  annotationCounts()
+  paramsAndOps()
+

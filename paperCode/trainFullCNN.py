@@ -22,12 +22,13 @@ METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
 
 def trainOffAllVolumes(allFeat):
   classifier.ONE_FEAT_NAME = None
-  opt = ['--flipx', '--flipy', '--flipz', '--trans']
+  opt = ['--flipx', '--flipy', '--flipz', '--flipxy', '--trans']
   if allFeat:
     opt.append('--features')
   classifier.initOptions(opt)
 
-  savePath = "paperCode/results/%s/network.ckpt" % ("allNet" if allFeat else "rawNet")
+  #savePath = "paperCode/results/%s/network.ckpt" % ("allNet" if allFeat else "rawNet")
+  savePath = None
   scanIgnore = SCAN_IDS[0] # Need to test against something - ignore results though
 
   classifier.brainsToBrain(SCAN_IDS, scanIgnore, CNN_FUNC, calcScore=True, writeVolume=False, savePath=savePath)

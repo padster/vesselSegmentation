@@ -1,5 +1,6 @@
 import gc
 import numpy as np
+import random
 np.random.seed(0)
 
 import files
@@ -88,12 +89,18 @@ def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False, savePath=
   return toReturn
 
 
-def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):
+def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, savePath=None, perBrainExamples=None):
     trainX, trainY = None, None
     print ("Loading points from scans: %s" % (str(fromIDs)))
     for fromID in fromIDs:
         print ("  ... loading %s" % (fromID))
         fromX, fromY = files.convertScanToXY(fromID, ALL_FEAT, MORE_FEAT, PAD, FLIP_X, FLIP_Y, FLIP_Z, FLIP_XY, merge=True, oneFeat=ONE_FEAT_NAME, oneTransID=ONE_TRANS_ID)
+
+        if perBrainExamples is not None:
+            idxSubset = np.random.choice(len(fromX), perBrainExamples, replace=False)
+            fromX = [fromX[idx] for idx in idxSubset]
+            fromY = fromY[idxSubset]
+
         if trainX is None:
             trainX, trainY = fromX, fromY
         else:

@@ -12,8 +12,6 @@ import cnn
 
 RUN_COUNT = 5
 BRAIN_COUNT = 6
-ALL_FEATURES = False
-
 
 CNN_FUNC = cnn.runOne
 
@@ -48,15 +46,13 @@ def generateResults(scanIDs, experimentName, runID):
 def runExperiment(runID, brainCount, allFeat):
   random.seed(runID)
   random.shuffle(SCAN_IDS)
-  if runID == 3:
-    return
 
   expName = "NO_FEATURES"
   if allFeat:
     expName = "ALL_FEATURES"
   classifier.ONE_FEAT_NAME = None
 
-  opt = ['--flipx', '--flipy', '--flipz', '--trans']
+  opt = ['--flipx', '--flipy', '--flipz', '--flipxy', '--trans']
   if allFeat:
     opt.append('--features')
   classifier.initOptions(opt)
@@ -65,5 +61,6 @@ def runExperiment(runID, brainCount, allFeat):
 
 
 if __name__ == '__main__':
-  runExperiment(3, BRAIN_COUNT, True)
-  runExperiment(4, BRAIN_COUNT, True)
+  for i in range(3):
+    runExperiment(runID=i, brainCount=3, allFeat=True)
+  #runExperiment(4, BRAIN_COUNT, True)

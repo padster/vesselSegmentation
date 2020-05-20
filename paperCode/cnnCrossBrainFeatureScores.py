@@ -49,7 +49,7 @@ def runExperiment(allFeat, singleFeat, collector):
   elif singleFeat is not None:
     expName = "ONE_FEATURE_" + singleFeat
 
-  opt = ['--flipx', '--flipy', '--flipz', '--trans']
+  opt = ['--flipx', '--flipy', '--flipz', '--flipxy', '--trans']
   if allFeat:
     opt.append('--features')
     classifier.ONE_FEAT_NAME = None

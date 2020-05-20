@@ -128,3 +128,10 @@ def formatTable(colVals, rowVals, tableVals):
 
 def applyBrainMask(data, mask):
 	return data * mask
+
+def maskBounds(zColumn):
+	isBrain = np.argwhere(zColumn == 1)
+	if len(isBrain) == 0:
+		return -1, -1
+	else:
+		return isBrain[0, 0], isBrain[-1, 0] + 1

@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 np.set_printoptions(precision=3)
 pd.set_option('precision', 3)
 
+import classifier
 import files
 import util
 
@@ -22,11 +23,7 @@ FEATURES = ['raw', 'EM', 'JV', 'PC']
 METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
 
 def resultsForScan(scanID):
-  scanPath   = '%s/%s/Normal%s-MRA-FS.mat' % (files.BASE_PATH, scanID, scanID)
-  lTrainPath = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (files.BASE_PATH, scanID, scanID)
-  lTestPath  = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (files.BASE_PATH, scanID, scanID)
-
-  data, lTrain, lTest = files.loadAllInputsUpdated(scanID, allFeatures=True, moreFeatures=False)
+  data, lTrain, lTest = files.loadAllInputsUpdated(scanID, classifier.PAD, allFeatures=True, moreFeatures=False)
   assert data.shape[-1] == len(FEATURES)
 
   labels = np.vstack((lTrain, lTest))

@@ -1,4 +1,5 @@
 # import libtiff
+from functools import lru_cache
 import numpy as np
 import scipy.io
 
@@ -44,6 +45,7 @@ def loadCNN(path='data/Normal001-MRA-CNN.mat'):
 def loadCRF(path='data/Normal001-MRA-CRF.mat'):
     return loadMat(path, 'crf')
 
+@lru_cache(maxsize=None)
 def loadFeat(path):
     # print ("Loading features from " + path)
     mat = scipy.io.loadmat(path)
@@ -52,13 +54,20 @@ def loadFeat(path):
     else:
         return mat.get('volMRA'), mat.get('EM'), mat.get('JV'), mat.get('PC')
 
-def loadBM(scanID):
-    path = "D:/projects/vessels/inputs/%s/Normal%s-MRA-BM.mat" % (scanID, scanID)
+def loadBM(scanID, maskPad=None):
+    path = "%s/%s/Normal%s-MRA-BM.mat" % (BASE_PATH, scanID, scanID)
     print ("Loading Brain Mask from %s" % path)
-    mat = scipy.io.loadmat(path)
-    return mat.get('BM')
+    mask = scipy.io.loadmat(path).get('BM')
+    # Note: masks have false positives around the edges:
+    if maskPad is not None:
+        mask[ :maskPad, :, :] = 0
+        mask[-maskPad:, :, :] = 0
+        mask[:,  :maskPad, :] = 0
+        mask[:, -maskPad:, :] = 0
+    return mask
 
 # Loads the 2d [X Y Z 0/1-label] matrix for vessel annotations
+@lru_cache(maxsize=None)
 def loadLabels(path='data/Normal001-MRA-labels.mat'):
     return loadMat(path, 'coordTable')
 
@@ -167,13 +176,12 @@ def convertScanToXY(scanID, allFeatures, moreFeatures, pad, flipX, flipY, flipZ,
 
 
 # Given full volume, split up into a subset of the cubes the same size as the inputs
-def convertVolumeStack(data, pad, x, y):
-    raise Exception("Need to convert this to the new SubVolume model")
-    nX, nY, nZ, nChan = data.shape
+def convertVolumeStack(scanID, pad, x, y, zFr, zTo):
+    assert scanID in PADDED_VOLUMES, "Volume stack not from cached scan"
 
     Xs = []
-    for z in range(pad, nZ - pad):
-        Xs.append(data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :])
+    for z in range(zFr, zTo):
+        Xs.append(SubVolume(scanID, x, y, z, pad, False, False, False, False))
     return np.array(Xs)
 
 def fillPredictions(result, predictions, pad):

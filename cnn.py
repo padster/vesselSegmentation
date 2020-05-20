@@ -7,6 +7,7 @@ from sklearn.model_selection import RepeatedStratifiedKFold
 import sys
 import tensorflow as tf
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 
 import classifier
@@ -37,6 +38,8 @@ BASE_BATCH = 5
 N_EPOCHS = 5
 
 BATCH_SIZE = BASE_BATCH * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
+
+LOG_INTERVAL = 30
 
 def kInit(seed):
     return tf.glorot_normal_initializer(seed=seed)
@@ -184,18 +187,19 @@ def predict(sess, scores, xInput, isTraining, data):
         nTransforms = 16  # model.N_TRANSFORMS
         data = util.allRotations(data)
         preds = sess.run(scores, feed_dict={
-            xInput: util.subVolumesToTensor(data), 
+            xInput: util.subVolumesToTensor(data),
             isTraining: False
         })
         preds = preds[:, 1].reshape((-1, nTransforms))
         return util.combinePredictions(preds)
     else:
         preds = sess.run(scores, feed_dict={
-            xInput: util.subVolumesToTensor(data), 
+            xInput: util.subVolumesToTensor(data),
             isTraining: False
         })
         return preds[:, 1].tolist()
 
+PROGRESS_WRITER = SummaryWriter()
 
 # As an example, run CNN on these given labels and test data, return the score.
 def runOne(trainX, trainY, testX, testY, scanID, savePath):
@@ -215,6 +219,7 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
     xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = (_getNetworkFunc())()
 
     saver = None if savePath is None else tf.train.Saver()
+    iterCount = 0
 
     costs, corrs = [], []
     with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
@@ -241,6 +246,9 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
                 })
                 totalCost += _cost
                 totalCorr += _corr
+                iterCount += 1
+                if ((iterCount + 1) % LOG_INTERVAL) == 0:
+                    PROGRESS_WRITER.add_scalar('loss', _cost, iterCount)
 
             print (">> Epoch %d had TRAIN loss: %.2f\t#Correct = %5d/%5d = %f" % (
                 epoch, totalCost, totalCorr, len(trainY), totalCorr / len(trainY)
@@ -273,16 +281,17 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
 
             #rewrite variable names
             allPreds = []
-            for x in tqdm(range(startX, endX), ascii=True):
-                for y in tqdm(range(startY, endY), ascii=True):
-                    dataAsInput = files.convertVolumeStack(testX, pad, x, y)
+            for x in tqdm(range(testX.shape[0]), ascii=True):
+                for y in tqdm(range(testX.shape[1]), ascii=True):
+                    dataAsInput = files.convertVolumeStack(testX, 'testX', pad, x, y)
                     preds = predict(sess, scores, xInput, isTraining, dataAsInput)
                     allPreds.extend(preds)
             allPreds = np.array(allPreds)
             print ("\n# predictions: " + str(allPreds.shape))
 
-            volumeResult = np.zeros(testX.shape[0:3])
-            volumeResult = files.fillPredictions(volumeResult, allPreds, pad)
+            #volumeResult = np.zeros(testX.shape[0:3])
+            volumeResult = allPreds
+            #volumeResult = files.fillPredictions(volumeResult, allPreds, pad)
             # resultPath = "data/%s/Normal%s-MRA-CNN-trans.mat" % (scanID, scanID)
             resultPath = "data/tmp/%s-weighted.mat" % scanID
             print ("Writing to %s" % (resultPath))
@@ -315,49 +324,96 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
     else:
         return costs, corrs, volumeResult, None
 
-
-# TODO: Migrate to classifier
-def volumeFromSavedNet(netPath, scanID, resultPath):
+# Run the classifier over a whole volume, generate a volume of results.
+def volumeFromSavedNet(netPath, scanID, resultPath, xFr=None, xTo=None, useMask=True):
+    pad = classifier.PAD
     # resultPath = "data/multiV/04_25/Normal%s-MRA-CNN.mat" % (scanID)
     tf.reset_default_graph()
 
     print ("Using network %s to generate volume %s" % (netPath, scanID))
-    volume = files.loadAllInputsUpdated(scanID, classifier.ALL_FEAT, classifier.MORE_FEAT, oneFeat=classifier.ONE_FEAT_NAME, noTrain=True)
+    volume = files.loadAllInputsUpdated(scanID, pad, classifier.ALL_FEAT, classifier.MORE_FEAT, oneFeat=classifier.ONE_FEAT_NAME, noTrain=True)
+    prediction = np.zeros(volume.shape[0:3])
 
+    brainMask = np.ones(volume.shape[0:3])
+    if useMask:
+        brainMask = files.loadBM(scanID, maskPad=classifier.SIZE)
 
     xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = (_getNetworkFunc())()
     saver = tf.train.Saver()
+
+    # Change these if we need only small subsegments
+    #XMIN, XMAX = 0, volume.shape[0]
+    if xFr is None:
+        xFr = 0
+    if xTo is None:
+        xTo = volume.shape[0]
 
     with tf.Session() as sess:
         print ("Loading net from file...")
         start_time = datetime.datetime.now()
         saver.restore(sess, netPath)
 
-        # Generate entire volume:
+        # Generate entire volume, one column of x/y at a time:
         print ("\nGenerating all predictions for volume %s" % (scanID))
-        pad = classifier.PAD
-        startX, endX = pad, volume.shape[0] - pad
-        startY, endY = pad, volume.shape[0] - pad
 
-        #rewrite variable names
-        allPreds = []
-        for x in tqdm(range(startX, endX), ascii=True):
-            for y in tqdm(range(startY, endY), ascii=True):
-                dataAsInput = files.convertVolumeStack(volume, pad, x, y)
-                preds = predict(sess, scores, xInput, isTraining, dataAsInput)
-                allPreds.extend(preds)
-        allPreds = np.array(allPreds)
-        print ("\n# predictions: " + str(allPreds.shape))
+        nBrain = 0
+        for x in tqdm(range(xFr, xTo)):
+            for y in range(volume.shape[1]):
+                zFr, zTo = util.maskBounds(brainMask[x, y, :])
+                nBrain += zTo - zFr
 
-        volumeResult = np.zeros(volume.shape[0:3])
-        volumeResult = files.fillPredictions(volumeResult, allPreds, pad)
+        with tqdm(total=nBrain, ascii=True) as progress:
+            for x in range(xFr, xTo):
+                for y in range(volume.shape[1]):
+                    zFr, zTo = util.maskBounds(brainMask[x, y, :])
+                    if zFr == -1:
+                        continue # No brain in this column
+                    dataAsInput = files.convertVolumeStack(scanID, pad, x, y, zFr, zTo)
+                    preds = predict(sess, scores, xInput, isTraining, dataAsInput)
+                    prediction[x, y, zFr:zTo] = preds
+                    progress.update(zTo - zFr)
+
         print ("Writing to %s" % (resultPath))
-        files.writePrediction(resultPath, "cnn", volumeResult)
+        files.writePrediction(resultPath, "cnn", prediction)
 
     end_time = datetime.datetime.now()
     print('Time elapse: ', str(end_time - start_time))
 
 
+def calcStats(netPath, toID):
+    params, flops = -1, -1
+
+    tf.reset_default_graph()
+
+    xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = (_getNetworkFunc())()
+    saver = tf.train.Saver()
+
+
+    toX, toY = files.convertScanToXY(toID, 
+        classifier.ALL_FEAT, classifier.MORE_FEAT, classifier.PAD, 
+        False, False, False, False, 
+        merge=True, oneFeat=classifier.ONE_FEAT_NAME, oneTransID=classifier.ONE_TRANS_ID)
+    batchX, batchY = toX[0:1], toY[0:1]
+
+
+    with tf.Session() as sess:
+        saver.restore(sess, netPath)
+
+        #predictions = predict(sess, scores, xInput, isTraining, batchX)
+
+        flops = tf.profiler.profile(sess.graph, 
+            options=tf.profiler.ProfileOptionBuilder.float_operation(), 
+            run_meta = tf.RunMetadata(), cmd='op'
+        )
+        params = tf.profiler.profile(sess.graph, 
+            options=tf.profiler.ProfileOptionBuilder.trainable_variables_parameter()
+        )
+
+
+    return {
+        'params': params.total_parameters,
+        'flops': flops.total_float_ops
+    }
 
 if __name__ == '__main__':
     classifier.initOptions(sys.argv)
