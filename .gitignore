@@ -3,6 +3,7 @@
 *.png
 *.csv
 
+images/**
 data/**
 runs/**
 paperCode/results/**
