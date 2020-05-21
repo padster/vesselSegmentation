@@ -9,7 +9,6 @@ import tensorflow as tf
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-
 import classifier
 import files
 import util
@@ -17,38 +16,31 @@ import viz
 
 tf.set_random_seed(0)
 
+# DCNN hyperparameters:
 
 N_FOLDS = 2 # Train on 1/2, Test on 1/2
 N_REPEATS = 5 if classifier.RUN_AWS else 1 # K-fold this many times
 RANDOM_SEED = 194981
 
-
 ERROR_WEIGHT = -2 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
 ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
 
-# SET IN MAIN:
-#SIZE = 0
-#N_EPOCHS = 0
-#BATCH_SIZE = 0
-#RUN_LOCAL = False
-
 LEARNING_RATE = 0.0003 # 0.001 # 0.03
 DROPOUT_RATE = 0.65 #.5
-BASE_BATCH = 5
 N_EPOCHS = 5
 
+BASE_BATCH = 5
 BATCH_SIZE = BASE_BATCH * (2 if classifier.FLIP_X else 1) * (2 if classifier.FLIP_Y else 1) * (2 if classifier.FLIP_Z else 1)
 
 LOG_INTERVAL = 30
+PROGRESS_WRITER = SummaryWriter()
 
 def kInit(seed):
     return tf.glorot_normal_initializer(seed=seed)
 
+# Network using 7x7x7xC volumes as input
 def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     nFilt = [64, 64, 64]
-    # nFilt = [64, 128, 128]
-    # nFilt = [32, 16, 16]
-    # nFilt = [32, 32, 32]
     xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, classifier.N_FEAT])
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
     isTraining = tf.placeholder(tf.bool)
@@ -75,14 +67,12 @@ def buildNetwork7(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAN
         updateOps = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(updateOps):
             trainOp = optimizer.minimize(cost)
-        # optimizer = tf.train.AdamOptimizer(learningRate).minimize(cost)
-        # optimizer = tf.train.AdagradOptimizer(learningRate).minimize(cost)
 
     correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(yInput, 1))
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
     return xInput, yInput, isTraining, trainOp, cost, numCorrect, predictedProbs
 
-
+# Network using 9x9x9xC volumes as input
 def buildNetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     nFilt = [64, 64, 64, 32, 32]
     xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, classifier.N_FEAT])
@@ -122,6 +112,7 @@ def buildNetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RAN
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
     return xInput, yInput, isTraining, trainOp, cost, numCorrect, predictedProbs
 
+# Network using 11x11x11xC volumes as input
 def buildNetwork11(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     nFilt = [64, 64, 64, 32, 32]
     xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, classifier.N_FEAT])
@@ -161,16 +152,16 @@ def buildNetwork11(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RA
     numCorrect = tf.reduce_sum(tf.cast(correct, tf.int32))
     return xInput, yInput, isTraining, trainOp, cost, numCorrect, predictedProbs
 
+# Override this to try out your own network (e.g. FCN)
 customNetworkFunc = None
 def overrideNetwork(networkFunc):
     global customNetworkFunc
     customNetworkFunc = networkFunc
 
-
+# Return the network to used, based on the input size.
 def _getNetworkFunc():
     if customNetworkFunc is not None:
         return customNetworkFunc()
-
     if classifier.SIZE == 7:
         return buildNetwork7
     elif classifier.SIZE == 9:
@@ -181,7 +172,7 @@ def _getNetworkFunc():
         print ("No network for size %d" % (classifier.SIZE))
         raise 0
 
-
+# Inference! Predict some inputs of X, with or without transform merging.
 def predict(sess, scores, xInput, isTraining, data):
     if classifier.PREDICT_TRANSFORM:
         nTransforms = 16  # model.N_TRANSFORMS
@@ -199,13 +190,10 @@ def predict(sess, scores, xInput, isTraining, data):
         })
         return preds[:, 1].tolist()
 
-PROGRESS_WRITER = SummaryWriter()
-
-# As an example, run CNN on these given labels and test data, return the score.
+# Run CNN on these given labels and test data, return the score.
 def runOne(trainX, trainY, testX, testY, scanID, savePath):
-    # HACK
-    trainX = np.array(trainX)
-    testX = np.array(testX)
+    # Force them to be numpy arrays, not lists:
+    trainX, testX = np.array(trainX), np.array(testX)
 
     epochs = N_EPOCHS
     batchSize = BATCH_SIZE
@@ -289,11 +277,8 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
             allPreds = np.array(allPreds)
             print ("\n# predictions: " + str(allPreds.shape))
 
-            #volumeResult = np.zeros(testX.shape[0:3])
             volumeResult = allPreds
-            #volumeResult = files.fillPredictions(volumeResult, allPreds, pad)
-            # resultPath = "data/%s/Normal%s-MRA-CNN-trans.mat" % (scanID, scanID)
-            resultPath = "data/tmp/%s-weighted.mat" % scanID
+            resultPath = "data/%s-CNN.mat" % scanID
             print ("Writing to %s" % (resultPath))
             files.writePrediction(resultPath, "cnn", volumeResult)
 
@@ -327,7 +312,6 @@ def runOne(trainX, trainY, testX, testY, scanID, savePath):
 # Run the classifier over a whole volume, generate a volume of results.
 def volumeFromSavedNet(netPath, scanID, resultPath, xFr=None, xTo=None, useMask=True):
     pad = classifier.PAD
-    # resultPath = "data/multiV/04_25/Normal%s-MRA-CNN.mat" % (scanID)
     tf.reset_default_graph()
 
     print ("Using network %s to generate volume %s" % (netPath, scanID))
@@ -342,7 +326,6 @@ def volumeFromSavedNet(netPath, scanID, resultPath, xFr=None, xTo=None, useMask=
     saver = tf.train.Saver()
 
     # Change these if we need only small subsegments
-    #XMIN, XMAX = 0, volume.shape[0]
     if xFr is None:
         xFr = 0
     if xTo is None:
@@ -379,28 +362,21 @@ def volumeFromSavedNet(netPath, scanID, resultPath, xFr=None, xTo=None, useMask=
     end_time = datetime.datetime.now()
     print('Time elapse: ', str(end_time - start_time))
 
-
+# Helper method to calculate parameter and flops stats for the network.
 def calcStats(netPath, toID):
     params, flops = -1, -1
-
     tf.reset_default_graph()
 
     xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = (_getNetworkFunc())()
     saver = tf.train.Saver()
 
-    #toX, toY = files.convertScanToXY(toID, 
-    #    classifier.ALL_FEAT, classifier.MORE_FEAT, classifier.PAD, 
-    #    False, False, False, False, 
-    #    merge=True, oneFeat=classifier.ONE_FEAT_NAME, oneTransID=classifier.ONE_TRANS_ID)
-    #batchX, batchY = toX[0:1], toY[0:1]
-
     with tf.Session() as sess:
         saver.restore(sess, netPath)
-        flops = tf.profiler.profile(sess.graph, 
-            options=tf.profiler.ProfileOptionBuilder.float_operation(), 
+        flops = tf.profiler.profile(sess.graph,
+            options=tf.profiler.ProfileOptionBuilder.float_operation(),
             run_meta = tf.RunMetadata(), cmd='op'
         )
-        params = tf.profiler.profile(sess.graph, 
+        params = tf.profiler.profile(sess.graph,
             options=tf.profiler.ProfileOptionBuilder.trainable_variables_parameter()
         )
 
@@ -409,11 +385,10 @@ def calcStats(netPath, toID):
         'flops': flops.total_float_ops
     }
 
+
 if __name__ == '__main__':
     classifier.initOptions(sys.argv)
-
     savePath = None
     classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False, savePath=savePath)
     #classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '056', runOne, calcScore=True, writeVolume=False, savePath=savePath)
-
-    # volumeFromSavedNet(savePath, '002')
+    #volumeFromSavedNet(savePath, '002')

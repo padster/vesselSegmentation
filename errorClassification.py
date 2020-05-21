@@ -1,3 +1,5 @@
+# Utility, to go through a scan, and see which exact labels were classified incorrectly.
+
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
@@ -6,7 +8,6 @@ import classifier
 import cnn
 import files
 import util
-
 
 def generateErrorForSingleBrain(scanID):
   data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, classifier.ALL_FEAT, classifier.MORE_FEAT, oneFeat=classifier.ONE_FEAT_NAME)
@@ -40,8 +41,6 @@ def generateErrorForSingleBrain(scanID):
   files.writePrediction(errorPath, 'coordTable', allErrors)
   plt.hist(allErrors[:, 3].ravel())
   plt.show()
-
-
 
 def main():
   generateErrorForSingleBrain('034')

@@ -1,3 +1,5 @@
+# Some utility code for inspecting agreement between methods and features.
+
 import numpy as np
 import matplotlib.pyplot as plt
 

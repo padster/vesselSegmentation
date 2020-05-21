@@ -1,4 +1,4 @@
-# import libtiff
+# Utility for most of the file loading for this project
 from functools import lru_cache
 import numpy as np
 import scipy.io
@@ -18,8 +18,6 @@ USE_PREPROC = True
 
 
 BASE_PATH = "H:/projects/vessels/inputs"
-# BASE_PATH = "/home/ubuntu/data/inputs"
-# BASE_PATH = "data/inputs"
 
 # HACK: Set by caller
 CNN_FEAT = False
@@ -47,7 +45,6 @@ def loadCRF(path='data/Normal001-MRA-CRF.mat'):
 
 @lru_cache(maxsize=None)
 def loadFeat(path):
-    # print ("Loading features from " + path)
     mat = scipy.io.loadmat(path)
     if CAST_TYPES:
         return mat.get('volMRA').astype(np.float32), mat.get('EM').astype(np.float32), mat.get('JV').astype(np.float32), mat.get('PC').astype(np.float32)
@@ -66,9 +63,12 @@ def loadBM(scanID, maskPad=None):
         mask[:, -maskPad:, :] = 0
     return mask
 
-# Loads the 2d [X Y Z 0/1-label] matrix for vessel annotations
+# Loads the 2d [X Y Z 0/1-label] matrix for vessel annotations.
+# NOTE: X/Y/Z values are 1-based.
 @lru_cache(maxsize=None)
 def loadLabels(path='data/Normal001-MRA-labels.mat'):
+    # NOTE: this used an older copy of the labels, now it's possible to load
+    # the labels_full.csv table, and select the required rows by scan ID.
     return loadMat(path, 'coordTable')
 
 # Given [X Y Z 0/1-label], and intensity, pick out cubes (of size CUBE_SZ) around the centres.
@@ -114,8 +114,8 @@ def convertToInputs(scanID, data, labels, pad, flipX, flipY, flipZ, flipXY, oneT
             pass
     return Xs, np.array(Ys)
 
+# Load all input features, and sparse labels, for a given scan.
 def loadAllInputsUpdated(scanID, pad, allFeatures, moreFeatures, oneFeat=None, noTrain=False):
-    # fsPath = 'data/%s/Normal%s-MRA-FS.mat' % (scanID, scanID)
     fsPath     = "%s/%s/Normal%s-MRA-FS.mat" % (BASE_PATH, scanID, scanID)
     lTrainPath = "%s/%s/Normal%s-MRA_annotationAll_training_C.mat" % (BASE_PATH, scanID, scanID)
     lTestPath  = "%s/%s/Normal%s-MRA_annotationAll_testing_C.mat" % (BASE_PATH, scanID, scanID)
@@ -167,6 +167,7 @@ def loadAllInputsUpdated(scanID, pad, allFeatures, moreFeatures, oneFeat=None, n
         print ("Labels: %s train, %s test" % (str(lTrain.shape), str(lTest.shape)))
         return data, lTrain, lTest
 
+# Loads train and test labels for each scan, converting them to X and Y for training.
 def convertScanToXY(scanID, allFeatures, moreFeatures, pad, flipX, flipY, flipZ, flipXY, merge=True, oneFeat=None, oneTransID=None):
     assert merge == True
     data, labelsTrain, labelsTest = loadAllInputsUpdated(scanID, pad, allFeatures, moreFeatures, oneFeat)
@@ -182,14 +183,7 @@ def convertVolumeStack(scanID, pad, x, y, zFr, zTo):
         Xs.append(SubVolume(scanID, x, y, z, pad, False, False, False, False))
     return np.array(Xs)
 
-def fillPredictions(result, predictions, pad):
-    nX, nY, nZ = result.shape
-
-    predictions = predictions.reshape( (nX - 2*pad, nY - 2*pad, nZ - 2*pad) )
-    result[pad:nX-pad, pad:nY-pad, pad:nZ-pad] = predictions
-    return result
-
-# Write out 3d matrix of [0 - 1] predictions for each cell.
+# Write out 3d volume of predictions as a matlab matrix.
 def writePrediction(path, key, prediction):
     data = {}
     data[key] = prediction.astype(np.float16)
@@ -206,23 +200,6 @@ def asMatrix(asList, nRows):
     assert nRows * nCols == len(asList), "List wrong size for matrix conversion"
     return [asList[i:i+nCols] for i in range(0, len(asList), nCols)]
 
-def tiffRead(path):
-    # First use tifffile to get channel data (not supported by libtiff?)
-    shape = None
-    with TiffFile(path) as tif:
-        shape = tif.asarray().shape
-        print("Tiff shape: ", shape)
-    nChannels = shape[0] if len(shape) == 4 else 1
-
-    stack = []
-    tif = libtiff.TIFF.open(path, mode='r')
-    stack = asMatrix([np.array(img) for img in tif.iter_images()], nChannels)
-    tif.close()
-    return stack
-
 def tiffWrite(path, volume):
     volume = (volume * 65535).astype(np.uint16)
-    # tif = libtiff.TIFFFimage(volume, description='')
-    # tif.write_file(path, compression='lzw')
-    # del tif
     imsave(path, volume)

@@ -1,3 +1,4 @@
+# Unused: Test out our network against a random forest classifier
 import numpy as np
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.metrics import roc_auc_score

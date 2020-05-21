@@ -1,3 +1,5 @@
+# Unused: try to use a Convolutional Autoencoder to do dimensionality
+# reduction to help with network shape and feature generation.
 import datetime
 import math
 import matplotlib.pyplot as plt
@@ -16,12 +18,10 @@ import viz
 TRAIN_CAE = "--train" in sys.argv
 CLASSIFY = "--classify" in sys.argv
 
-
 INNER_DIMEN = 100
 
 ERROR_WEIGHT = 0 # Positive = FN down, Sensitivity up. Negative = FP down, Specificity up
 ERROR_WEIGHT_FRAC = 2 ** ERROR_WEIGHT
-
 
 RANDOM_SEED = 194981
 LEARNING_RATE = 0.003 # 0.03
@@ -127,7 +127,7 @@ def buildCAENetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=
         xOutput = tf.squeeze(xOutputPre)
         # xOutput = deconv2
         print ("XO: ", xOutput.shape)
-    
+
     # Loss and optimizer
     with tf.name_scope("training"):
         intensityInput = xInput[:, :, :, :, 0]
@@ -169,16 +169,16 @@ def buildDenseNetwork(learningRate=DENSE_LEARNING_RATE):
         correctD = tf.equal(tf.argmax(predictionD, 1), tf.argmax(yInputD, 1))
         numCorrectD = tf.reduce_sum(tf.cast(correctD, tf.int32))
     return {
-        'x': xInputD, 
-        'y': yInputD, 
-        't': trainOpD, 
-        'c': costD, 
-        'nc': numCorrectD, 
+        'x': xInputD,
+        'y': yInputD,
+        't': trainOpD,
+        'c': costD,
+        'nc': numCorrectD,
         'p': predictedProbsD
     }
 
 
-## 
+##
 def densePredict(sess, xInput, innerFeat, isTraining, xInputD, yInputD, probs, cost, batchX, batchY):
     #if classifier.PREDICT_TRANSFORM:
     if False: # HACK - support transforms during prediction
@@ -214,7 +214,7 @@ def runDenseNetwork(trainID, testID, loadPath, batchSize=BATCH_SIZE):
 
     trainX, trainY = files.convertToInputs(volTrain, lTrain, classifier.PAD, classifier.FLIP_X, classifier.FLIP_Y, classifier.FLIP_Z)
     testX,   testY = files.convertToInputs(volTest, lTest, classifier.PAD, False, False, False)
-    
+
     print ("Dense network: %d train samples, %d test" % (len(trainX), len(testX)))
 
     print ("Building networks...")
@@ -272,8 +272,8 @@ def runDenseNetwork(trainID, testID, loadPath, batchSize=BATCH_SIZE):
                 for itr in range(itrs):
                     batchX = testX[itr*batchSize: (itr+1)*batchSize]
                     batchY = testY[itr*batchSize: (itr+1)*batchSize]
-            
-                    predictions, cost = densePredict(sess, caeX, innerFeat, caeIsTraining, xInput, yInput, predictedProbs, cost, batchX, batchY) 
+
+                    predictions, cost = densePredict(sess, caeX, innerFeat, caeIsTraining, xInput, yInput, predictedProbs, cost, batchX, batchY)
                     totalCost += cost
                     totalCorr += np.sum((np.array(predictions) > 0.5) == (np.array(batchY) > 0.5))
                 end_time_epoch = datetime.datetime.now()
@@ -310,20 +310,13 @@ def runDenseNetwork(trainID, testID, loadPath, batchSize=BATCH_SIZE):
 # Build CAE, train with all brain voxels
 SUB_SAMPLE = 40
 def trainAndSave(scanID, savePath=None):
-    epochs = N_EPOCHS    
+    epochs = N_EPOCHS
     batchSize = BATCH_SIZE
 
     inFeat, lTrain, lTest = files.loadAllInputsUpdated(scanID, classifier.ALL_FEAT, classifier.MORE_FEAT)
     labelled = np.concatenate([lTrain, lTest])
-    lX, lY = files.convertToInputs(inFeat, labelled, classifier.PAD, False, False, False)  
+    lX, lY = files.convertToInputs(inFeat, labelled, classifier.PAD, False, False, False)
     # simpleTSNE(lX, lY)
-    
-    """
-    rs = inFeat.reshape(inFeat.shape[0] * inFeat.shape[1] * inFeat.shape[2], -1)
-    print ("FEATURE BOUNDS:")
-    print (np.min(rs, axis=0))
-    print (np.max(rs, axis=0))
-    """
 
     bm = files.loadBM(scanID)
     brainIndices = np.array(np.where(bm == 1)).T
@@ -335,7 +328,7 @@ def trainAndSave(scanID, savePath=None):
     denseNet = buildDenseNetwork()
 
     saver = None if savePath is None else tf.train.Saver()
-    
+
     costs = []
     with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
         start_time = datetime.datetime.now()
@@ -347,7 +340,6 @@ def trainAndSave(scanID, savePath=None):
         for epoch in range(epochs):
             start_time_epoch = datetime.datetime.now()
             print('Scan %s, Epoch %d started' % (scanID, epoch))
-            # trainX, trainY = util.randomShuffle(trainX, trainY)
             np.random.shuffle(brainIndices)
 
             # mini batch for trianing set:
@@ -377,8 +369,6 @@ def trainAndSave(scanID, savePath=None):
         })
         print ('Train/Test data has cost %.3f\ av = %.6f' % (_cost * lX.shape[0], _cost))
         print (_feat.shape)
-        # runDenseNetwork(scanID, sess, xInput, innerFeat, isTraining, lTrain, lTest, denseNet)
-        #simpleTSNE(_feat, lY)
 
         # Save the network:
         if savePath is not None:
@@ -404,6 +394,6 @@ def main():
         print(util.formatScores(scores))
 
 
-  
+
 if __name__ == '__main__':
   main()

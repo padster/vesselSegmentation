@@ -1,6 +1,7 @@
 PADDED_VOLUMES = {}
 N_TRANSFORMS = 16
 
+# Subvolume parameters to single integer identifier
 def transformParamsToID(flipXY, revX, revY, revZ):
   tID = 0
   tID = 2 * tID + (1 if flipXY else 0)
@@ -9,6 +10,7 @@ def transformParamsToID(flipXY, revX, revY, revZ):
   tID = 2 * tID + (1 if   revZ else 0)
   return tID
 
+# Transform identifier to subvolume parameters.
 def transformIDtoParams(tID):
   mask = int(tID)
   revZ,   mask = (mask & 1) != 0, mask >> 1
@@ -18,11 +20,12 @@ def transformIDtoParams(tID):
   return flipXY, revX, revY, revZ
 
 
-# ew.
+# ew. When indexing in reverse, to end at 0, you don't
+# end your slice at -1, but rather have to end it at None
 def _HACK_SAFE_SLICE(idx):
 	return None if idx == -1 else idx
 
-
+# Extract an XYZC subvolume, given a SubVolume spec.
 def extractSubVolume(subvolume):
 	assert subvolume.s in PADDED_VOLUMES
 	volume = PADDED_VOLUMES[subvolume.s]
@@ -41,8 +44,10 @@ def extractSubVolume(subvolume):
 		print (sZ)
 	return unflipped if not flipXY else unflipped.transpose(1, 0, 2, 3) # reverse X & Y
 
+# Represented a subvolume, but with a small memory footprint.
+# use extractSubVolume to materialize the actual XYZC data into memory.
 class SubVolume:
-	s = None 						 # Scan ID, as a three-digit string
+	s = None 			 # Scan ID, as a three-digit string
 	x, y, z = -1, -1, -1 # Centre position
 	p = -1               # Padding around centre
 	t = -1               # Transform to apply

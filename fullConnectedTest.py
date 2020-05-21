@@ -1,3 +1,4 @@
+# Unused: Test out our network against a fully connected DNN, i.e. no convolutions.
 import classifier
 import cnn
 import math
@@ -20,7 +21,7 @@ def kInit(seed):
 
 def buildFCNetwork9(dropoutRate=DROPOUT_RATE, learningRate=LEARNING_RATE, seed=RANDOM_SEED):
     assert classifier.SIZE == 9
-    # B x 9 x 9 x 9 x F 
+    # B x 9 x 9 x 9 x F
     #    => B x 729F => B x sqrt(729F) => B x 2
     xInput = tf.placeholder(tf.float32, shape=[None, classifier.SIZE, classifier.SIZE, classifier.SIZE, classifier.N_FEAT])
     yInput = tf.placeholder(tf.float32, shape=[None, 2])
@@ -71,4 +72,3 @@ if __name__ == '__main__':
     classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '056', cnn.runOne, calcScore=True, writeVolume=False, savePath=None)
 
     cnn.overrideNetwork(None)
-    

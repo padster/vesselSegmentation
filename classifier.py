@@ -14,22 +14,23 @@ import sys
 N_FEAT, RUN_AWS, ALL_FEAT, MORE_FEAT, SAVE_NET, LOAD_NET, FLIP_X, FLIP_Y, FLIP_Z, FLIP_XY, PREDICT_TRANSFORM, CNN_FEAT, ONE_FEAT, ONE_FEAT_NAME, ONE_TRANS_ID = \
     None, None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
+# Collection of options that can be used to customize the run.
 def initOptions(argv):
     global N_FEAT, RUN_AWS, ALL_FEAT, MORE_FEAT, SAVE_NET, LOAD_NET, FLIP_X, FLIP_Y, FLIP_Z, FLIP_XY, PREDICT_TRANSFORM, CNN_FEAT, ONE_FEAT, ONE_FEAT_NAME, ONE_TRANS_ID
 
-    RUN_AWS = "--local" not in argv
-    ALL_FEAT = "--features" in argv
-    MORE_FEAT = "--morefeat" in argv
-    SAVE_NET = "--save" in argv
-    LOAD_NET = "--load" in argv
-    FLIP_X = "--flipx" in argv
-    FLIP_Y = "--flipy" in argv
-    FLIP_Z = "--flipz" in argv
-    FLIP_XY = "--flipxy" in argv
-    PREDICT_TRANSFORM = "--trans" in argv
-    CNN_FEAT = "--cnnfeat" in argv
-    files.CNN_FEAT = CNN_FEAT # HACK
-    ONE_FEAT = "--onefeat" in argv
+    RUN_AWS = "--local" not in argv  # On AWS or local
+    ALL_FEAT = "--features" in argv  # Using all 4 features, or just raw
+    MORE_FEAT = "--morefeat" in argv # Using extra simple volume features
+    SAVE_NET = "--save" in argv      # Save the network?
+    LOAD_NET = "--load" in argv      # Load network from file?
+    FLIP_X = "--flipx" in argv       # Use X flipping in transforms
+    FLIP_Y = "--flipy" in argv       # Use Y flipping in transforms
+    FLIP_Z = "--flipz" in argv       # Use Z flipping in transforms
+    FLIP_XY = "--flipxy" in argv     # Use X-Y transpose in transforms
+    PREDICT_TRANSFORM = "--trans" in argv # Use transforms to improve predictions
+    CNN_FEAT = "--cnnfeat" in argv   # Add CNN prediction as a feature
+    files.CNN_FEAT = CNN_FEAT        # files can't read from here, as here depends on files.
+    ONE_FEAT = "--onefeat" in argv   # Run with a single feature added
 
     N_FEAT = 1
     if ALL_FEAT:
@@ -41,6 +42,7 @@ def initOptions(argv):
     if ONE_FEAT:
         N_FEAT += 1
 
+    # Show at the start what is going on.
     print ("""
 ====
 Target: %s
@@ -68,7 +70,7 @@ Flip XY: %s
         ("With only transform %s\n" % (ONE_TRANS_ID)) if ONE_TRANS_ID is not None else "",
     ))
 
-
+# Within-brain run
 def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False, savePath=None):
   data, labelsTrain, labelsTest = files.loadAllInputsUpdated(scanID, PAD, ALL_FEAT, MORE_FEAT, oneFeat=ONE_FEAT_NAME)
 
@@ -88,7 +90,7 @@ def singleBrain(scanID, runOneFunc, calcScore=True, writeVolume=False, savePath=
     toReturn = volume
   return toReturn
 
-
+# Across-brain validations
 def brainsToBrain(fromIDs, toID, runOneFunc, calcScore=True, writeVolume=False, savePath=None, perBrainExamples=None):
     trainX, trainY = None, None
     print ("Loading points from scans: %s" % (str(fromIDs)))
