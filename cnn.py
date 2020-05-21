@@ -388,19 +388,14 @@ def calcStats(netPath, toID):
     xInput, yInput, isTraining, trainOp, cost, numCorrect, scores = (_getNetworkFunc())()
     saver = tf.train.Saver()
 
-
-    toX, toY = files.convertScanToXY(toID, 
-        classifier.ALL_FEAT, classifier.MORE_FEAT, classifier.PAD, 
-        False, False, False, False, 
-        merge=True, oneFeat=classifier.ONE_FEAT_NAME, oneTransID=classifier.ONE_TRANS_ID)
-    batchX, batchY = toX[0:1], toY[0:1]
-
+    #toX, toY = files.convertScanToXY(toID, 
+    #    classifier.ALL_FEAT, classifier.MORE_FEAT, classifier.PAD, 
+    #    False, False, False, False, 
+    #    merge=True, oneFeat=classifier.ONE_FEAT_NAME, oneTransID=classifier.ONE_TRANS_ID)
+    #batchX, batchY = toX[0:1], toY[0:1]
 
     with tf.Session() as sess:
         saver.restore(sess, netPath)
-
-        #predictions = predict(sess, scores, xInput, isTraining, batchX)
-
         flops = tf.profiler.profile(sess.graph, 
             options=tf.profiler.ProfileOptionBuilder.float_operation(), 
             run_meta = tf.RunMetadata(), cmd='op'
@@ -408,7 +403,6 @@ def calcStats(netPath, toID):
         params = tf.profiler.profile(sess.graph, 
             options=tf.profiler.ProfileOptionBuilder.trainable_variables_parameter()
         )
-
 
     return {
         'params': params.total_parameters,
@@ -420,12 +414,6 @@ if __name__ == '__main__':
 
     savePath = None
     classifier.singleBrain('002', runOne, calcScore=True, writeVolume=False, savePath=savePath)
-    #classifier.brainsToBrain(['002', '019', '022'], '023', runOne, calcScore=True, writeVolume=False, savePath=savePath)
-    # classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '056', runOne, calcScore=True, writeVolume=False, savePath=savePath)
-
-    # classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '084', runOne, calcScore=True, writeVolume=False, savePath=savePath)
+    #classifier.brainsToBrain(['002', '019', '022', '023', '034', '058', '066', '082'], '056', runOne, calcScore=True, writeVolume=False, savePath=savePath)
 
     # volumeFromSavedNet(savePath, '002')
-    # volumeFromSavedNet(savePath, '019')
-    # volumeFromSavedNet(savePath, '022')
-    # volumeFromSavedNet(savePath, '023')

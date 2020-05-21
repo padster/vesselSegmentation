@@ -1,6 +1,7 @@
 # Run this as 'python paperCode/<code>.py'
 import os
 import sys
+import tifffile
 sys.path.append(os.getcwd())
 
 # Train the classifier using all volumes of annotated data, and save the result to file.
@@ -31,6 +32,25 @@ def annotationCounts():
   asDF = pd.DataFrame(data=rows, index=SCAN_IDS, columns=['trainV', 'trainNV', 'testV', 'testNV'])
   print (asDF)
 
+def volumeCounts(scanID='002'):
+  maskPath = os.path.join(files.BASE_PATH, scanID, "Normal%s-MRA-FSLBET-mask.tif" % scanID)
+  mask = tifffile.imread(maskPath)
+  print ("Mask loaded: shape = ", mask.shape)
+
+  midasGTPath = os.path.join(files.BASE_PATH, scanID, "VascularNetworkMask.tif")
+  gt_ = tifffile.imread(midasGTPath)
+  gt_ = np.swapaxes(gt_[0], 0, 2)
+  print ("GT loaded: shape = ", gt_.shape)
+
+  cnnPath = "paperCode/results/allNet/volumes/%s-CNN.tif" % (scanID)
+  cnn = tifffile.imread(cnnPath)
+  print ("CNN loaded: shape = ", cnn.shape)
+
+
+  print ("Voxels in brain: ", np.sum(mask))
+  print (" GT: %d V, %d NV " % (np.sum( (mask == 1) & (gt_ > 0.5) ), np.sum( (mask == 1) & (gt_ <= 0.5) ) ))
+  print ("CNN: %d V, %d NV " % (np.sum( (mask == 1) & (cnn > 0.5) ), np.sum( (mask == 1) & (cnn <= 0.5) ) ))
+
 
 def paramsAndOps(allFeat=False, scanID='002'):
   sub = ("allNet" if allFeat else "rawNet")
@@ -52,6 +72,6 @@ if __name__ == '__main__':
   print ("Calculating stats for the paper...\n")
   
   #annotationCounts()
-
-  paramsAndOps()
+  volumeCounts()
+  #paramsAndOps()
 
