@@ -1,3 +1,4 @@
+# Analysis for the results when trained off particular features.
 # Run this as 'python paperCode/<code>.py'
 import os
 import sys
@@ -12,15 +13,11 @@ import cnn
 
 random.seed(0)
 
-CNN_FUNC = cnn.runOne
-
-SCAN_IDS = ['002', '019', '022', '023', '034', '056', '058', '066', '082']
-METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
-
-
 def runClassifier(trainBrains, testBrain):
-  return classifier.brainsToBrain(trainBrains, testBrain, CNN_FUNC, calcScore=True, writeVolume=False, savePath=None)
+  return classifier.brainsToBrain(trainBrains, testBrain, cnn.runOne, calcScore=True)
 
+# For all scan IDs, uses that as test, all others as train.
+# Write all five metrics out to CSV
 def generateResults(scanIDs, experimentName):
   n = len(scanIDs)
 
@@ -38,10 +35,11 @@ def generateResults(scanIDs, experimentName):
   means = np.mean(allValues, axis=1)[np.newaxis].T
   withMean = np.hstack((allValues, means))
 
-  withMeanDF = pd.DataFrame(withMean, METRICS, scanIDs + ['Mean'])
+  withMeanDF = pd.DataFrame(withMean, util.METRICS, scanIDs + ['Mean'])
   withMeanDF.to_csv("paperCode/results/%s.csv" % experimentName)
   return withMeanDF
 
+# Sets up a single run
 def runExperiment(allFeat, singleFeat, collector):
   expName = "NO_FEATURES"
   if allFeat:
@@ -58,10 +56,11 @@ def runExperiment(allFeat, singleFeat, collector):
     classifier.ONE_FEAT_NAME = singleFeat
   classifier.initOptions(opt)
 
-  collector[expName] = generateResults(SCAN_IDS, expName)
+  collector[expName] = generateResults(util.SCAN_IDS, expName)
 
+# Run with no features, one feature at a time, and all four.
 if __name__ == '__main__':
-  random.shuffle(SCAN_IDS)
+  random.shuffle(util.SCAN_IDS)
 
   collector = {}
   runExperiment(False, None, collector)
@@ -69,7 +68,6 @@ if __name__ == '__main__':
   runExperiment(False, 'JV', collector)
   runExperiment(False, 'PC', collector)
   runExperiment(True, None, Collector)
-
   for k, v in collector.items():
     print (k)
     print (v)

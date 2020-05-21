@@ -101,9 +101,10 @@ def convertToInputs(scanID, data, labels, pad, flipX, flipY, flipZ, flipXY, oneT
     Xs, Ys = [], []
     for row in range(rows):
         x, y, z, label = labels[row]
+        # Label X/Y/Z correction from 1-based to 0-based:
         x, y, z = x - 1, y - 1, z - 1
-        # xCells = data[x-pad:x+pad+1, y-pad:y+pad+1, z-pad:z+pad+1, :]
         xCells = paddedData[x:x+2*pad+1, y:y+2*pad+1, z:z+2*pad+1, :]
+
         if xCells.shape == (sz, sz, sz, data.shape[3]):
             for t in transforms:
                 Xs.append(SubVolumeFromTransformID(scanID, x, y, z, pad, t))
@@ -159,6 +160,8 @@ def loadAllInputsUpdated(scanID, pad, allFeatures, moreFeatures, oneFeat=None, n
     if noTrain:
         return data
     else:
+        # **NOTE**: labels here are using matlab's 1-based indexing
+        # Need to subtract 1 if wanting to use python's 0-based.
         lTrain = loadLabels(lTrainPath)
         lTest = loadLabels(lTestPath)
         print ("Labels: %s train, %s test" % (str(lTrain.shape), str(lTest.shape)))
@@ -169,11 +172,6 @@ def convertScanToXY(scanID, allFeatures, moreFeatures, pad, flipX, flipY, flipZ,
     data, labelsTrain, labelsTest = loadAllInputsUpdated(scanID, pad, allFeatures, moreFeatures, oneFeat)
     labels = np.vstack((labelsTrain, labelsTest))
     return convertToInputs(scanID, data, labels, pad, flipX, flipY, flipZ, flipXY, oneTransID=oneTransID)
-    # Unmerged version, no longer needed - eventually to be removed
-    # trainX, trainY = convertToInputs(scanID, data, labelsTrain, pad, flipX, flipY, flipZ, flipXY)
-    # testX, testY = convertToInputs(scanID, data, labelsTest, pad, flipX, flipY, flipZ, flipXY)
-    # return trainX, trainY, testX, testY
-
 
 # Given full volume, split up into a subset of the cubes the same size as the inputs
 def convertVolumeStack(scanID, pad, x, y, zFr, zTo):

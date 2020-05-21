@@ -5,6 +5,12 @@ from scipy import ndimage
 
 from model import SubVolume, extractSubVolume
 
+# IDs of MIDAS scans that have manual annotations
+SCAN_IDS = ['002', '019', '022', '023', '034', '056', '058', '066', '082']
+
+# 5 Metrics measured by genScores:
+METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
+
 def randomShuffle(X, Y):
 	assert X.shape[0] == Y.shape[0]
 	p = np.random.permutation(X.shape[0])
@@ -30,7 +36,6 @@ def allRotations(subvolumes):
 	return allSV
 
 def combinePredictions(predictions):
-	# TODO - better ways?
 	return np.mean(predictions, axis=1)
 	# pi = np.prod(predictions, axis=1)
 	# mpi = np.prod(1 - predictions, axis=1)

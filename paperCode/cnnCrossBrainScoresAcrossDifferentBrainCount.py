@@ -1,3 +1,4 @@
+# Check across-brain results, given different numbers of training brains.
 # Run this as 'python paperCode/<code>.py'
 import os
 import sys
@@ -9,18 +10,15 @@ import random
 
 import classifier
 import cnn
+import util
 
+# Run every configuration 5 times.
 RUN_COUNT = 5
-BRAIN_COUNT = 6
-
-CNN_FUNC = cnn.runOne
-
-SCAN_IDS = ['002', '019', '022', '023', '034', '056', '058', '066', '082']
-METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
 
 def runClassifier(trainBrains, testBrain):
-  return classifier.brainsToBrain(trainBrains, testBrain, CNN_FUNC, calcScore=True, writeVolume=False, savePath=None)
+  return classifier.brainsToBrain(trainBrains, testBrain, cnn.runOne, calcScore=True)
 
+# Generate results for a single run, given # test brains, and feature spect.
 def generateResults(scanIDs, experimentName, runID):
   n = len(scanIDs)
 
@@ -38,29 +36,30 @@ def generateResults(scanIDs, experimentName, runID):
   means = np.mean(allValues, axis=1)[np.newaxis].T
   withMean = np.hstack((allValues, means))
 
-  withMeanDF = pd.DataFrame(withMean, METRICS, scanIDs + ['Mean'])
+  withMeanDF = pd.DataFrame(withMean, util.METRICS, scanIDs + ['Mean'])
   withMeanDF.to_csv("paperCode/results/BRAINS_%d_RUN_%d_%s.csv" % (len(scanIDs), runID, experimentName))
   return withMeanDF
 
-
-def runExperiment(runID, brainCount, allFeat):
+# Do a single run, given nBrains and whether to use all or no features.
+def runExperiment(runID, nBrains, allFeat):
+  # First shuffle the scans, so we can randomly pick nBrains of them
   random.seed(runID)
-  random.shuffle(SCAN_IDS)
+  random.shuffle(util.SCAN_IDS)
 
   expName = "NO_FEATURES"
   if allFeat:
     expName = "ALL_FEATURES"
   classifier.ONE_FEAT_NAME = None
-
   opt = ['--flipx', '--flipy', '--flipz', '--flipxy', '--trans']
   if allFeat:
     opt.append('--features')
   classifier.initOptions(opt)
 
-  generateResults(SCAN_IDS[:brainCount], expName, runID)
+  generateResults(util.SCAN_IDS[:nBrains], expName, runID)
 
 
 if __name__ == '__main__':
-  for i in range(3):
-    runExperiment(runID=i, brainCount=3, allFeat=True)
-  #runExperiment(4, BRAIN_COUNT, True)
+  for nBrains in [3, 6]:
+    for i in range(RUN_COUNT):
+      runExperiment(runID=i, brainCount=nBrains, allFeat=True)
+      runExperiment(runID=i, brainCount=nBrains, allFeat=False)

@@ -1,11 +1,10 @@
+# Generate tables of results for raw & features as classifiers themselves
+
 # Run this as 'python paperCode/<code>.py'
 import os
 import sys
 sys.path.append(os.getcwd())
 
-#
-# Generate tables of results for raw & features as classifiers themselves
-#
 import numpy as np
 from sklearn.metrics import roc_auc_score
 from skimage.filters import threshold_otsu
@@ -18,10 +17,9 @@ import classifier
 import files
 import util
 
-SCAN_IDS = ['002', '019', '022', '023', '034', '056', '058', '066', '082'] # [, '084']
 FEATURES = ['raw', 'EM', 'JV', 'PC']
-METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
 
+# Run a single scan agaist classifiers defined off all the input feature values.
 def resultsForScan(scanID):
   data, lTrain, lTest = files.loadAllInputsUpdated(scanID, classifier.PAD, allFeatures=True, moreFeatures=False)
   assert data.shape[-1] == len(FEATURES)
@@ -32,7 +30,7 @@ def resultsForScan(scanID):
   xyz = xyz - 1 # IMPORTANT!
 
   predictions = np.zeros(nLabels)
-  
+
   accs, senss, specs, dices, aucs = \
     np.zeros(len(FEATURES)), np.zeros(len(FEATURES)), np.zeros(len(FEATURES)), np.zeros(len(FEATURES)), np.zeros(len(FEATURES))
 
@@ -44,35 +42,34 @@ def resultsForScan(scanID):
     accs[i], senss[i], specs[i], dices[i], aucs[i] = util.genScores(labels, predictions, 0.5, T_ostu)
   return accs, senss, specs, dices, aucs
 
-
+# For each feature, check accuracy of using that feature to classify all scans.
 def generateResults():
-  shape = (len(FEATURES), len(SCAN_IDS))
+  shape = (len(FEATURES), len(util.SCAN_IDS))
 
   accs, senss, specs, dices, aucs = \
     np.zeros(shape), np.zeros(shape), np.zeros(shape), np.zeros(shape), np.zeros(shape)
 
-  for idx, scanID in enumerate(SCAN_IDS):
+  for idx, scanID in enumerate(util.SCAN_IDS):
     fAccs, fSenss, fSpecs, fDices, fAucs = resultsForScan(scanID)
     accs[ :, idx] = fAccs
     senss[:, idx] = fSenss
     specs[:, idx] = fSpecs
     dices[:, idx] = fDices
     aucs[ :, idx] = fAucs
+  print ("\n\n")
 
   allMeans = []
-
-  print ("\n\n")
-  for metric, result in zip(METRICS, [accs, senss, specs, dices, aucs]):
+  for metric, result in zip(util.METRICS, [accs, senss, specs, dices, aucs]):
     mean = np.mean(result, axis=1)[np.newaxis].T # This is really ugly...
     allMeans.append(mean)
     withMean = np.hstack((result, mean))
     print ("\n\n%s for (scan, feature)" % (metric))
     print ("-----------")
-    print (pd.DataFrame(withMean, FEATURES, SCAN_IDS + ['Mean']))
-  
+    print (pd.DataFrame(withMean, FEATURES, util.SCAN_IDS + ['Mean']))
+
   print ("\n\nAverage scores across scans:")
   print ("-----------")
-  print (pd.DataFrame(np.hstack(tuple(allMeans)), FEATURES, METRICS))
+  print (pd.DataFrame(np.hstack(tuple(allMeans)), FEATURES, util.METRICS))
 
 
 if __name__ == '__main__':

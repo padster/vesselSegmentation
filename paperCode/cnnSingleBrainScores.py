@@ -1,3 +1,4 @@
+# Get within-brain scores for DCNN, across all annotated volumes
 # Run this as 'python paperCode/<code>.py'
 import os
 import sys
@@ -10,26 +11,24 @@ import random
 
 import classifier
 import cnn
+import util
 
 random.seed(0)
 
 CNN_FUNC = cnn.runOne
 
-SCAN_IDS = ['002', '019', '022', '023', '034', '056', '058', '066', '082']
-METRICS = ['Accuracy', 'Sensitivity', 'Specificity', 'Dice score', 'ROC AUC']
-
 def generateResults(scanID):
-  opt = ['--flipx', '--flipy', '--flipz', '--flipxy', '--trans', '--features']
+  opt = ['--flipx', '--flipy', '--flipz', '--flipxy', '--trans']
   classifier.initOptions(opt)
-  return classifier.singleBrain(scanID, CNN_FUNC, calcScore=True, writeVolume=False, savePath=None)
+  return classifier.singleBrain(scanID, CNN_FUNC, calcScore=True)
 
 if __name__ == '__main__':
-  random.shuffle(SCAN_IDS)
+  random.shuffle(util.SCAN_IDS)
 
   results = {}
-  for scanID in SCAN_IDS:
+  for scanID in util.SCAN_IDS:
     results[scanID] = generateResults(scanID)
 
   # Write using pickle for now.
-  resultsDF = pd.DataFrame(results, index=METRICS).T
+  resultsDF = pd.DataFrame(results, index=util.METRICS).T
   resultsDF.to_csv("paperCode/results/SINGLE_BRAIN.csv")
